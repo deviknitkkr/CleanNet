@@ -1,116 +1,77 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/home_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/statistics_screen.dart';
+import 'models/vpn_model.dart';
 
-void main() {
-  runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final vpnModel = VpnModel(prefs);
+  runApp(
+    ChangeNotifierProvider.value(
+      value: vpnModel,
+      child: MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatefulWidget {
-  @override
-  _MyAppState createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  static const methodChannel = MethodChannel('com.deviknitkkr.clean_net/vpn');
-
-  bool isVpnRunning = false;
-  Set<String> blockedDomains = {'example.com', 'ads.example.com'};
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _checkVpnStatus();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkVpnStatus();
-    }
-  }
-
-  Future<void> _checkVpnStatus() async {
-    try {
-      final bool running = await methodChannel.invokeMethod('isVpnRunning');
-      setState(() {
-        isVpnRunning = running;
-      });
-    } catch (e) {
-      print("Error checking VPN status: $e");
-    }
-  }
-
-  Future<void> _toggleVpn() async {
-    try {
-      if (isVpnRunning) {
-        print("Stopping VPN");
-        await methodChannel.invokeMethod('stopVpn');
-      } else {
-        print("Starting VPN");
-        await methodChannel.invokeMethod('startVpn');
-        await _updateBlockedDomains();
-      }
-      await _checkVpnStatus();
-    } catch (e) {
-      print("Error toggling VPN: $e");
-    }
-  }
-
-  Future<void> _updateBlockedDomains() async {
-    try {
-      await methodChannel.invokeMethod('updateBlockedDomains', {'domains': blockedDomains.toList()});
-      print("Updated blocked domains: $blockedDomains");
-    } catch (e) {
-      print("Error updating blocked domains: $e");
-    }
-  }
-
+class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: Text('DNS VPN App')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                isVpnRunning ? 'VPN is ON' : 'VPN is OFF',
-                style: TextStyle(fontSize: 20),
-              ),
-              SizedBox(height: 20),
-              ToggleButton(
-                onPressed: _toggleVpn,
-                isOn: isVpnRunning,
-              ),
-            ],
-          ),
-        ),
+      title: 'Modern VPN App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        useMaterial3: true,
       ),
+      home: MainScreen(),
     );
   }
 }
 
-class ToggleButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final bool isOn;
+class MainScreen extends StatefulWidget {
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
 
-  const ToggleButton({Key? key, required this.onPressed, required this.isOn}) : super(key: key);
+class _MainScreenState extends State<MainScreen> {
+  int _currentIndex = 0;
+  final List<Widget> _screens = [
+    HomeScreen(),
+    SettingsScreen(),
+    StatisticsScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Switch(
-      value: isOn,
-      onChanged: (value) => onPressed(),
-      activeColor: Colors.green,
-      inactiveThumbColor: Colors.red,
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: [
+          NavigationDestination(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart),
+            label: 'Statistics',
+          ),
+        ],
+      ),
     );
   }
 }
