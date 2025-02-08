@@ -39,14 +39,13 @@ class VpnModel extends ChangeNotifier {
       if (_isVpnEnabled) {
          _vpnChannel.invokeMethod('stopVpn');
       } else {
-         _vpnChannel.invokeMethod('startVpn', {'dnsServer': _dnsServer});
+         _vpnChannel.invokeMethod('startVpn', {'dnsServer': _dnsServer, 'blockedDomains': _blockedDomains});
       }
       _isVpnEnabled = !_isVpnEnabled;
       _prefs.setBool('vpn_enabled', _isVpnEnabled);
       notifyListeners();
     } catch (e) {
       print('Error toggling VPN: $e');
-      // Handle error (e.g., show a snackbar)
     }
   }
 

@@ -10,37 +10,51 @@ import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import org.xbill.DNS.Message;
-import org.xbill.DNS.SimpleResolver;
+import com.deviknitkkr.clean_net.utils.SubNetUtils;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.net.Inet4Address;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
-public class DnsVpnService extends VpnService implements Runnable {
+public class DnsVpnService extends VpnService {
     private static final String TAG = "DnsVpnService";
     public static final String ACTION_START = "START";
     public static final String ACTION_STOP = "STOP";
     public static final String EXTRA_DNS_SERVER = "DNS_SERVER";
+    public static final String EXTRA_BLOCKED_DOMAINS = "BLOCKED_DOMAINS";
     private ParcelFileDescriptor vpnInterface = null;
-    private String dnsServer;
 
-    Thread vpnThread;
+    private String rootDns;
+
+    Set<String> blockedDomains;
+    private SubNetUtils subNetUtils = new SubNetUtils();
+
+    private List<InetAddress> getSystemDns() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        if (cm != null) {
+            Network activeNetwork = cm.getActiveNetwork();
+            return Optional.ofNullable(cm.getLinkProperties(activeNetwork))
+                    .map(LinkProperties::getDnsServers)
+                    .orElse(Collections.emptyList());
+        }
+        return Collections.emptyList();
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null) {
             String action = intent.getAction();
             if (ACTION_START.equals(action)) {
-                dnsServer = intent.getStringExtra(EXTRA_DNS_SERVER);
+                rootDns = intent.getStringExtra(EXTRA_DNS_SERVER);
+                blockedDomains = new HashSet<>(Objects.requireNonNull(intent.getStringArrayListExtra(EXTRA_BLOCKED_DOMAINS)));
                 startVpn();
             } else if (ACTION_STOP.equals(action)) {
                 stopVpn();
@@ -50,18 +64,75 @@ public class DnsVpnService extends VpnService implements Runnable {
     }
 
     private void startVpn() {
+        List<String> localSubnets = subNetUtils.getLocalSubnets();
+        Map<String, String> availableSubnets = subNetUtils.findAvailableSubnets(localSubnets);
+
+        if (availableSubnets == null) {
+            Log.e(TAG, "No available subnets found!");
+            return;
+        }
+
+        String ipv4Subnet = availableSubnets.get("ipv4");
+        String ipv6Subnet = availableSubnets.get("ipv6");
+
+        Log.d(TAG, "Local subnets: " + localSubnets);
+        Log.d(TAG, "Available IPv4 subnet: " + ipv4Subnet);
+        Log.d(TAG, "Available IPv6 subnet: " + ipv6Subnet);
+
+        List<InetAddress> systemDns = getSystemDns();
+        Log.d(TAG, "System DNS: " + systemDns);
+
         if (vpnInterface == null) {
-            Builder builder = new Builder();
-            builder.addAddress("10.0.0.2", 32);
-            builder.addRoute("0.0.0.0", 0);
-            builder.addDnsServer("8.8.8.8");
-            builder.setSession("DnsVpnService");
+            Builder builder = new Builder()
+                    .setSession("DnsVpnService")
+                    .setMtu(1500);
+
+            // Add IPv4 address and routes
+            if (ipv4Subnet != null) {
+                String ipv4Address = ipv4Subnet.split("/")[0];
+                builder.addAddress(ipv4Address, 24); // Add IPv4 address with prefix length
+                for (int i = 1; i <= systemDns.size(); i++) {
+                    String alias = subNetUtils.incrementIpAddress(ipv4Address, i);
+                    Log.d(TAG, "IPv4 DNS alias: " + alias);
+                    builder.addDnsServer(alias); // Add IPv4 DNS server
+                    builder.addRoute(alias, 32); // Add IPv4 route
+                }
+            }
+
+            // Add IPv6 address and routes
+            if (ipv6Subnet != null) {
+                String ipv6Address = ipv6Subnet.split("/")[0];
+                builder.addAddress(ipv6Address, 64); // Add IPv6 address with prefix length
+                for (int i = 1; i <= systemDns.size(); i++) {
+                    String alias = subNetUtils.incrementIpAddress(ipv6Address, i);
+                    Log.d(TAG, "IPv6 DNS alias: " + alias);
+                    builder.addDnsServer(alias); // Add IPv6 DNS server
+                    builder.addRoute(alias, 128); // Add IPv6 route
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setMetered(false);
+            }
 
             try {
                 vpnInterface = builder.establish();
-                vpnThread = new Thread(this);
-                vpnThread.start();
+                FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
+                FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
 
+                Log.d(TAG, "Setting up DNS handler");
+                DnsHandler dnsHandler = new DnsHandler.Builder()
+                        .rootDnsServer(rootDns)
+                        .inputStream(in)
+                        .outputStream(out)
+                        .vpnService(this)
+                        .dnsQueryCallback(domain -> {
+                            System.out.println("Received query for domain: " + domain);
+                            return blockedDomains.contains(domain);
+                        })
+                        .build();
+                protect(dnsHandler.getDnsSocket());
+                new Thread(dnsHandler).start();
             } catch (Exception e) {
                 Log.e(TAG, "Error starting VPN: ", e);
                 stopVpn();
@@ -79,11 +150,6 @@ public class DnsVpnService extends VpnService implements Runnable {
             }
             vpnInterface = null;
         }
-        try {
-            vpnThread.interrupt();
-        } catch (Exception e) {
-            Log.d(TAG, "Vpn thread stopped");
-        }
         stopSelf();
     }
 
@@ -91,47 +157,5 @@ public class DnsVpnService extends VpnService implements Runnable {
     public void onDestroy() {
         super.onDestroy();
         stopVpn();
-    }
-
-    @Override
-    public void run() {
-        FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
-        FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
-
-        byte[] packet = new byte[32767];
-        while (true) {
-            int length;
-            try {
-                length = in.read(packet);
-                if (length > 0) {
-                    // Check if this is a DNS query (destination port 53)
-                    if (isDnsPacket(packet, length)) {
-                        logDnsQuery(packet, length);
-                    }
-                    // Forward the packet unchanged
-                    out.write(packet, 0, length);
-                }
-            } catch (IOException e) {
-                Log.e(TAG, "Error reading from VPN interface", e);
-            }
-        }
-    }
-
-    private boolean isDnsPacket(byte[] packet, int length) {
-        // Simple check: UDP packet with destination port 53
-        // This assumes the packet is IPv4. For IPv6, you'd need to adjust the offsets.
-        return length >= 28 && packet[9] == 17 && packet[22] == 0 && packet[23] == 53;
-    }
-
-    private void logDnsQuery(byte[] packet, int length) {
-        // Extract and log the DNS query
-        // This is a very basic implementation and doesn't handle all DNS packet types
-        try {
-            byte[] dnsPayload = Arrays.copyOfRange(packet, 28, length);
-            Message dnsMessage = new Message(dnsPayload);
-            Log.d(TAG, "DNS Query: " + dnsMessage.getQuestion().getName());
-        } catch (IOException e) {
-            Log.e(TAG, "Error parsing DNS query", e);
-        }
     }
 }
