@@ -3,6 +3,8 @@ package com.deviknitkkr.clean_net;
 import android.net.VpnService;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import org.pcap4j.packet.IpPacket;
 import org.pcap4j.packet.IpSelector;
 import org.pcap4j.packet.IpV4Packet;
@@ -10,7 +12,13 @@ import org.pcap4j.packet.IpV6Packet;
 import org.pcap4j.packet.Packet;
 import org.pcap4j.packet.UdpPacket;
 import org.pcap4j.packet.UnknownPacket;
+import org.xbill.DNS.DClass;
+import org.xbill.DNS.Flags;
 import org.xbill.DNS.Message;
+import org.xbill.DNS.Name;
+import org.xbill.DNS.Rcode;
+import org.xbill.DNS.SOARecord;
+import org.xbill.DNS.Section;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -116,9 +124,7 @@ public class DnsHandler implements Runnable {
         String dnsQueryName = dnsMsg.getQuestion().getName().toString(true);
         boolean shouldBlock = dnsQueryCallback.test(dnsQueryName);
 
-        if(!shouldBlock){
-            // Forward Dns query to root dns server
-
+        if (!shouldBlock) { // Forward Dns query to root dns server
             DatagramPacket outPacket = new DatagramPacket(dnsRawData, 0, dnsRawData.length, destAddr, parsedUdp.getHeader().getDstPort().valueAsInt());
             try {
                 DatagramSocket tunnel = new DatagramSocket();
@@ -130,36 +136,7 @@ public class DnsHandler implements Runnable {
                 tunnel.receive(replyPacket);
                 tunnel.close();
 
-                UdpPacket.Builder payLoadBuilder = new UdpPacket.Builder(parsedUdp)
-                        .srcPort(parsedUdp.getHeader().getDstPort())
-                        .dstPort(parsedUdp.getHeader().getSrcPort())
-                        .srcAddr(parsedPacket.getHeader().getDstAddr())
-                        .dstAddr(parsedPacket.getHeader().getSrcAddr())
-                        .correctChecksumAtBuild(true)
-                        .correctLengthAtBuild(true)
-                        .payloadBuilder(
-                                new UnknownPacket.Builder()
-                                        .rawData(responsePayload)
-                        );
-
-                IpPacket ipOutPacket;
-                if (parsedPacket instanceof IpV4Packet) {
-                    ipOutPacket = new IpV4Packet.Builder((IpV4Packet) parsedPacket)
-                            .srcAddr((Inet4Address) parsedPacket.getHeader().getDstAddr())
-                            .dstAddr((Inet4Address) parsedPacket.getHeader().getSrcAddr())
-                            .correctChecksumAtBuild(true)
-                            .correctLengthAtBuild(true)
-                            .payloadBuilder(payLoadBuilder)
-                            .build();
-
-                } else {
-                    ipOutPacket = new IpV6Packet.Builder((IpV6Packet) parsedPacket)
-                            .srcAddr((Inet6Address) parsedPacket.getHeader().getDstAddr())
-                            .dstAddr((Inet6Address) parsedPacket.getHeader().getSrcAddr())
-                            .correctLengthAtBuild(true)
-                            .payloadBuilder(payLoadBuilder)
-                            .build();
-                }
+                IpPacket ipOutPacket = generateResponsePacket(parsedPacket, responsePayload);
 
                 byte[] rawResponse = ipOutPacket.getRawData();
                 outputStream.write(rawResponse);
@@ -167,10 +144,60 @@ public class DnsHandler implements Runnable {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        }else {
-            Log.d(TAG, "Blocking:"+ dnsQueryName);
-            // Send block response to device
+        } else { // Send block response to device
+            try {
+                Log.d(TAG, "Blocking:" + dnsQueryName);
+                dnsMsg.getHeader().setFlag(Flags.QR);
+                dnsMsg.getHeader().setRcode(Rcode.NXDOMAIN);
+
+                Name name = Name.fromString("blocked.example.com.");  // Use a more meaningful domain
+                Name mbox = Name.fromString("admin.example.com.");    // Use a valid email address format
+                SOARecord soaRecord = new SOARecord(name, DClass.IN, 300,  // 5 minutes TTL
+                        name, mbox, 1, 3600, 600, 86400, 300);
+
+                dnsMsg.addRecord(soaRecord, Section.AUTHORITY);
+                IpPacket ipOutPacket = generateResponsePacket(parsedPacket, dnsMsg.toWire());
+                outputStream.write(ipOutPacket.getRawData());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+    }
+
+    @NonNull
+    private static IpPacket generateResponsePacket(IpPacket requestPacket, byte[] responsePayload) {
+        UdpPacket udpOutPacket = (UdpPacket) requestPacket.getPayload();
+        UdpPacket.Builder payLoadBuilder = new UdpPacket.Builder(udpOutPacket)
+                .srcPort(udpOutPacket.getHeader().getDstPort())
+                .dstPort(udpOutPacket.getHeader().getSrcPort())
+                .srcAddr(requestPacket.getHeader().getDstAddr())
+                .dstAddr(requestPacket.getHeader().getSrcAddr())
+                .correctChecksumAtBuild(true)
+                .correctLengthAtBuild(true)
+                .payloadBuilder(
+                        new UnknownPacket.Builder()
+                                .rawData(responsePayload)
+                );
+
+        IpPacket ipOutPacket;
+        if (requestPacket instanceof IpV4Packet) {
+            ipOutPacket = new IpV4Packet.Builder((IpV4Packet) requestPacket)
+                    .srcAddr((Inet4Address) requestPacket.getHeader().getDstAddr())
+                    .dstAddr((Inet4Address) requestPacket.getHeader().getSrcAddr())
+                    .correctChecksumAtBuild(true)
+                    .correctLengthAtBuild(true)
+                    .payloadBuilder(payLoadBuilder)
+                    .build();
+
+        } else {
+            ipOutPacket = new IpV6Packet.Builder((IpV6Packet) requestPacket)
+                    .srcAddr((Inet6Address) requestPacket.getHeader().getDstAddr())
+                    .dstAddr((Inet6Address) requestPacket.getHeader().getSrcAddr())
+                    .correctLengthAtBuild(true)
+                    .payloadBuilder(payLoadBuilder)
+                    .build();
+        }
+        return ipOutPacket;
     }
 
 
