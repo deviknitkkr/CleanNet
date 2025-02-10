@@ -39,7 +39,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 20),
                 Text(
-                  'Current DNS: ${vpnModel.dnsServer}',
+                  'Current DNS: ${vpnModel.dnsServer?.isNotEmpty == true ? vpnModel.dnsServer : "System Provided"}',
                   style: TextStyle(fontSize: 16),
                 ),
               ],

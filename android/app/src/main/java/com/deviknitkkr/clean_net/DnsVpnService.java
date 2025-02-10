@@ -14,6 +14,7 @@ import com.deviknitkkr.clean_net.utils.SubNetUtils;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashSet;
@@ -120,9 +121,17 @@ public class DnsVpnService extends VpnService {
                 FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
                 FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
 
+
                 Log.d(TAG, "Setting up DNS handler");
                 DnsHandler dnsHandler = new DnsHandler.Builder()
-                        .rootDnsServer(rootDns)
+                        .rootDnsServer(rootDns == null || rootDns.isBlank() ?
+                                systemDns.stream()
+                                        .filter(x -> x instanceof Inet4Address)
+                                        .map(InetAddress::getHostAddress)
+                                        .findFirst()
+                                        .orElse("1.1.1.1") // In case no system dns
+                                : rootDns
+                        )
                         .inputStream(in)
                         .outputStream(out)
                         .vpnService(this)
@@ -131,7 +140,6 @@ public class DnsVpnService extends VpnService {
                             return blockedDomains.contains(domain);
                         })
                         .build();
-                protect(dnsHandler.getDnsSocket());
                 new Thread(dnsHandler).start();
             } catch (Exception e) {
                 Log.e(TAG, "Error starting VPN: ", e);
