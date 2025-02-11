@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import com.deviknitkkr.clean_net.blocklist.WildcardTrie;
 import com.deviknitkkr.clean_net.utils.SubNetUtils;
 
 import java.io.FileInputStream;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DnsVpnService extends VpnService {
     private static final String TAG = "DnsVpnService";
@@ -31,7 +33,9 @@ public class DnsVpnService extends VpnService {
     public static final String EXTRA_DNS_SERVER = "DNS_SERVER";
     public static final String EXTRA_BLOCKED_DOMAINS = "BLOCKED_DOMAINS";
     private ParcelFileDescriptor vpnInterface = null;
+    private WildcardTrie wildcardTrie;
 
+    AtomicInteger count = new AtomicInteger();
     private String rootDns;
 
     Set<String> blockedDomains;
@@ -56,6 +60,7 @@ public class DnsVpnService extends VpnService {
             if (ACTION_START.equals(action)) {
                 rootDns = intent.getStringExtra(EXTRA_DNS_SERVER);
                 blockedDomains = new HashSet<>(Objects.requireNonNull(intent.getStringArrayListExtra(EXTRA_BLOCKED_DOMAINS)));
+                wildcardTrie = new WildcardTrie();
                 startVpn();
             } else if (ACTION_STOP.equals(action)) {
                 stopVpn();
@@ -124,7 +129,7 @@ public class DnsVpnService extends VpnService {
 
                 Log.d(TAG, "Setting up DNS handler");
                 DnsHandler dnsHandler = new DnsHandler.Builder()
-                        .rootDnsServer(rootDns == null || rootDns.isBlank() ?
+                        .dnsServerIp(rootDns == null || rootDns.isBlank() ?
                                 systemDns.stream()
                                         .filter(x -> x instanceof Inet4Address)
                                         .map(InetAddress::getHostAddress)
@@ -136,11 +141,12 @@ public class DnsVpnService extends VpnService {
                         .outputStream(out)
                         .vpnService(this)
                         .dnsQueryCallback(domain -> {
-                            System.out.println("Received query for domain: " + domain);
-                            return blockedDomains.contains(domain);
+                            System.out.println(count.getAndIncrement() +". Received query for domain: " + domain);
+                            return wildcardTrie.matches(domain);
                         })
                         .build();
                 new Thread(dnsHandler).start();
+                blockedDomains.forEach(x -> wildcardTrie.insert(x)); // Costly so doing it after starting the vpn
             } catch (Exception e) {
                 Log.e(TAG, "Error starting VPN: ", e);
                 stopVpn();
