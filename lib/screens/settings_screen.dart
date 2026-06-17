@@ -70,6 +70,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   String _dnsLabel(String ip) {
+    if (ip.isEmpty) return 'System DNS';
     final match = VpnModel.dnsPresets.cast<Map<String, String>?>().firstWhere(
           (p) => p!['ip'] == ip,
           orElse: () => null,
@@ -100,7 +101,7 @@ class SettingsScreen extends StatelessWidget {
         children: [
           ...VpnModel.dnsPresets.map((p) => RadioListTile<String>(
                 title: Text(p['name']!),
-                subtitle: Text(p['ip']!),
+                subtitle: Text(p['ip']!.isEmpty ? 'Use system DNS' : p['ip']!),
                 value: p['ip']!,
                 groupValue: model.dnsServer,
                 onChanged: (v) {

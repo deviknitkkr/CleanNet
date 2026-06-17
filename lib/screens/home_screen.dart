@@ -75,7 +75,7 @@ class HomeScreen extends StatelessWidget {
                         const Icon(Icons.dns, size: 18, color: Colors.grey),
                         const SizedBox(width: 8),
                         Text(
-                          'DNS: ${model.dnsServer}',
+                          'DNS: ${model.dnsServer.isEmpty ? "System" : model.dnsServer}',
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ],

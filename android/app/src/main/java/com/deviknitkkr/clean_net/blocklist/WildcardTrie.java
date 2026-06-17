@@ -24,7 +24,6 @@ public class WildcardTrie {
         List<String> parts = splitAndReverseDomain(domainPattern);
 
         // Reject patterns where * is at the root/TLD level (e.g., "ad.*", "ads.*").
-        // These would set the root node as wildcard, blocking ALL domains.
         if (!parts.isEmpty() && "*".equals(parts.get(0))) {
             return;
         }
@@ -33,12 +32,12 @@ public class WildcardTrie {
 
         for (String part : parts) {
             if (part.equals("*")) {
+                current = current.children.computeIfAbsent("*", k -> new TrieNode());
                 current.isWildcard = true;
-                break;
+                return;
             }
             current = current.children.computeIfAbsent(part, k -> new TrieNode());
         }
-        // Also match all subdomains of an exact domain entry
         current.isWildcard = true;
     }
 

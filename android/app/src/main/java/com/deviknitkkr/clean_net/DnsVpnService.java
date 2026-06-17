@@ -53,6 +53,7 @@ public class DnsVpnService extends VpnService {
     private String rootDns;
     Set<String> blockedDomains;
     private SubNetUtils subNetUtils = new SubNetUtils();
+    private Thread notificationUpdater;
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -76,6 +77,9 @@ public class DnsVpnService extends VpnService {
         );
 
         int totalBlocked = 0;
+        for (AtomicInteger v : blockedStats.values()) {
+            totalBlocked += v.get();
+        }
         Notification.Builder builder;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder = new Notification.Builder(this, CHANNEL_ID);
@@ -203,6 +207,19 @@ public class DnsVpnService extends VpnService {
 
                 new Thread(dnsHandler).start();
 
+                notificationUpdater = new Thread(() -> {
+                    while (!Thread.currentThread().isInterrupted()) {
+                        try {
+                            Thread.sleep(5000);
+                            NotificationManager nm = getSystemService(NotificationManager.class);
+                            if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
+                        } catch (InterruptedException e) {
+                            break;
+                        }
+                    }
+                });
+                notificationUpdater.start();
+
                 isRunning = true;
                 saveVpnState(true);
             } catch (Exception e) {
@@ -216,6 +233,10 @@ public class DnsVpnService extends VpnService {
         Log.d(TAG, "Stopping DNS Proxy");
         isRunning = false;
         saveVpnState(false);
+        if (notificationUpdater != null) {
+            notificationUpdater.interrupt();
+            notificationUpdater = null;
+        }
         if (vpnInterface != null) {
             try {
                 vpnInterface.close();

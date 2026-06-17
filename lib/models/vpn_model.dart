@@ -20,6 +20,7 @@ class VpnModel extends ChangeNotifier {
       'https://raw.githubusercontent.com/deviknitkkr/CleanNet/main/blocklist.txt';
 
   static const List<Map<String, String>> dnsPresets = [
+    {'name': 'System DNS', 'ip': ''},
     {'name': 'Cloudflare', 'ip': '1.1.1.1'},
     {'name': 'Google DNS', 'ip': '8.8.8.8'},
     {'name': 'Quad9', 'ip': '9.9.9.9'},

@@ -32,7 +32,9 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Predicate;
@@ -43,7 +45,8 @@ import java.util.function.Predicate;
 public class DnsHandler implements Runnable {
     private static final String TAG = "DnsHandler";
     private static final int BUFFER_SIZE = 32767;
-    private static final int THREAD_POOL_SIZE = 4; // Adjust based on system resources
+    private static final int THREAD_POOL_SIZE = 2;
+    private static final int DNS_CACHE_TTL_MS = 30_000;
 
     private final InetAddress dnsServer;
     private final Predicate<String> dnsQueryCallback;
@@ -51,6 +54,9 @@ public class DnsHandler implements Runnable {
     private final FileOutputStream outputStream;
     private final VpnService vpnService;
     private final ExecutorService executorService;
+    private final DatagramChannel sharedChannel;
+    private final Map<String, CachedDnsResponse> dnsCache = new ConcurrentHashMap<>();
+    private final Object channelLock = new Object();
     SOARecord blockedSoaResponse;
 
     {
@@ -61,17 +67,31 @@ public class DnsHandler implements Runnable {
         } catch (TextParseException e) {
             throw new RuntimeException(e);
         }
-
-
     }
 
-    private DnsHandler(Builder builder) throws SocketException, UnknownHostException {
+    private DnsHandler(Builder builder) throws SocketException, UnknownHostException, IOException {
         this.dnsServer = InetAddress.getByName(builder.dnsServerIp);
         this.dnsQueryCallback = builder.dnsQueryCallback;
         this.inputStream = builder.inputStream;
         this.outputStream = builder.outputStream;
         this.vpnService = builder.vpnService;
         this.executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        this.sharedChannel = DatagramChannel.open();
+        this.vpnService.protect(sharedChannel.socket());
+    }
+
+    private static class CachedDnsResponse {
+        final byte[] data;
+        final long expiresAt;
+
+        CachedDnsResponse(byte[] data) {
+            this.data = data;
+            this.expiresAt = System.currentTimeMillis() + DNS_CACHE_TTL_MS;
+        }
+
+        boolean isValid() {
+            return System.currentTimeMillis() < expiresAt;
+        }
     }
 
     @Override
@@ -89,6 +109,10 @@ public class DnsHandler implements Runnable {
             Log.e(TAG, "Error in run loop: " + e.getMessage());
         } finally {
             executorService.shutdown();
+            dnsCache.clear();
+            try {
+                sharedChannel.close();
+            } catch (IOException ignored) {}
         }
     }
 
@@ -118,35 +142,58 @@ public class DnsHandler implements Runnable {
 
     /**
      * Forwards the DNS query to the DNS server asynchronously.
-     *
-     * @param requestPacket The original IP packet.
-     * @param udpPacket     The UDP packet containing the DNS query.
-     * @param dnsRawData    The raw DNS data.
+     * Uses a shared DatagramChannel and a DNS response cache for performance.
      */
     private void forwardDnsQueryAsync(IpPacket requestPacket, UdpPacket udpPacket, byte[] dnsRawData) {
+        // Check cache first
+        Message dnsMsg;
+        String queryKey = null;
+        try {
+            dnsMsg = new Message(dnsRawData);
+            if (dnsMsg.getQuestion() != null) {
+                queryKey = dnsMsg.getQuestion().getName().toString(true);
+                CachedDnsResponse cached = dnsCache.get(queryKey);
+                if (cached != null && cached.isValid()) {
+                    sendResponse(requestPacket, cached.data);
+                    return;
+                }
+            }
+        } catch (IOException ignored) {}
+
+        final String key = queryKey;
         CompletableFuture.runAsync(() -> {
-            try (DatagramChannel channel = DatagramChannel.open()) {
-                vpnService.protect(channel.socket());
+            try {
+                byte[] responsePayload;
+                synchronized (channelLock) {
+                    ByteBuffer sendBuffer = ByteBuffer.wrap(dnsRawData);
+                    sharedChannel.send(sendBuffer,
+                            new InetSocketAddress(dnsServer, udpPacket.getHeader().getDstPort().valueAsInt()));
 
-                // Send the DNS query
-                ByteBuffer sendBuffer = ByteBuffer.wrap(dnsRawData);
-                channel.send(sendBuffer, new InetSocketAddress(dnsServer, udpPacket.getHeader().getDstPort().valueAsInt()));
+                    ByteBuffer receiveBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+                    sharedChannel.receive(receiveBuffer);
+                    receiveBuffer.flip();
 
-                // Receive the DNS response
-                ByteBuffer receiveBuffer = ByteBuffer.allocate(BUFFER_SIZE);
-                channel.receive(receiveBuffer);
-                receiveBuffer.flip();
+                    responsePayload = new byte[receiveBuffer.remaining()];
+                    receiveBuffer.get(responsePayload);
+                }
 
-                byte[] responsePayload = new byte[receiveBuffer.remaining()];
-                receiveBuffer.get(responsePayload);
+                // Cache the response
+                if (key != null) {
+                    dnsCache.put(key, new CachedDnsResponse(responsePayload));
+                }
 
-                // Generate and send the response packet
-                IpPacket ipOutPacket = generateResponsePacket(requestPacket, responsePayload);
-                outputStream.write(ipOutPacket.getRawData());
+                sendResponse(requestPacket, responsePayload);
             } catch (IOException e) {
-                Log.e(TAG, "Error forwarding DNS query asynchronously", e);
+                Log.e(TAG, "Error forwarding DNS query", e);
             }
         }, executorService);
+    }
+
+    private void sendResponse(IpPacket requestPacket, byte[] responsePayload) throws IOException {
+        IpPacket ipOutPacket = generateResponsePacket(requestPacket, responsePayload);
+        synchronized (outputStream) {
+            outputStream.write(ipOutPacket.getRawData());
+        }
     }
 
     /**
