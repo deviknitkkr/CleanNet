@@ -13,6 +13,8 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   Timer? _timer;
+  final _logScrollController = ScrollController();
+  int _prevLogCount = 0;
 
   @override
   void initState() {
@@ -27,6 +29,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _logScrollController.dispose();
     super.dispose();
   }
 
@@ -36,6 +39,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       builder: (context, model, child) {
         final stats = model.blockedStats;
         final total = model.totalBlocked;
+
+        if (model.logs.length > _prevLogCount) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_logScrollController.hasClients) {
+              _logScrollController.animateTo(
+                _logScrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+        _prevLogCount = model.logs.length;
 
         return Scaffold(
           appBar: AppBar(
@@ -167,6 +183,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               SizedBox(
                 height: 300,
                 child: ListView.builder(
+                  controller: _logScrollController,
                   itemCount: model.logs.length,
                   itemBuilder: (context, i) {
                     return Padding(
