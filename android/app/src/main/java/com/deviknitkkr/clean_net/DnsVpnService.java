@@ -119,6 +119,14 @@ public class DnsVpnService extends VpnService {
             } else if (ACTION_STOP.equals(action)) {
                 stopVpn();
             }
+        } else {
+            // Service restarted by system after death — VPN interface is gone.
+            // Update persisted state so UI reflects reality.
+            Log.d(TAG, "Service restarted with null intent, VPN no longer active");
+            isRunning = false;
+            saveVpnState(false);
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
         }
         return START_STICKY;
     }
@@ -256,8 +264,7 @@ public class DnsVpnService extends VpnService {
     }
 
     public static boolean isVpnRunning(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        return prefs.getBoolean("vpn_enabled", false);
+        return isRunning;
     }
 
     public static Map<String, Integer> getBlockedStatsSnapshot() {

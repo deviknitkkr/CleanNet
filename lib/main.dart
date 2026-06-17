@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home_screen.dart';
@@ -9,6 +10,21 @@ import 'models/vpn_model.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
+
+  // Load default blocklist from asset if user has none
+  final domains = prefs.getStringList('blocked_domains');
+  if (domains == null || domains.isEmpty) {
+    try {
+      final data = await rootBundle.loadString('assets/blocklist.txt');
+      final lines = data
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.startsWith('#'))
+          .toList();
+      await prefs.setStringList('blocked_domains', lines);
+    } catch (_) {}
+  }
+
   final vpnModel = VpnModel(prefs);
   await vpnModel.checkVpnState();
   runApp(
