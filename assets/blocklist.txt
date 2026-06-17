@@ -85,11 +85,7 @@ wv.inner-active.mobi
 sdk-events.inner-active.mobi
 
 # --- Fingersoft ---
-*.fingersoft.net
 ads3.fingersoft.net
-fsid.fingersoft.net
-hcr2-f9.fingersoft.net
-acs3.fingersoft.net
 
 # --- AppsFlyer ---
 *.appsflyer.com

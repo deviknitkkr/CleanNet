@@ -208,38 +208,110 @@ class SettingsScreen extends StatelessWidget {
   void _showDomainList(BuildContext context, VpnModel model) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Blocked Domains'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: model.blockedDomains.isEmpty
-              ? const Text('No domains loaded')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: model.blockedDomains.length,
-                  itemBuilder: (_, i) => ListTile(
-                    dense: true,
-                    title: Text(
-                      model.blockedDomains[i],
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.remove_circle_outline,
-                          size: 20, color: Colors.red),
-                      onPressed: () {
-                        model.removeBlockedDomain(model.blockedDomains[i]);
-                      },
-                    ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Blocked Domains'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: model.blockedDomains.isEmpty
+                ? const Text('No domains loaded')
+                : _DomainSearchList(model: model, setState: setState),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DomainSearchList extends StatefulWidget {
+  final VpnModel model;
+  final void Function(void Function()) setState;
+
+  const _DomainSearchList({
+    required this.model,
+    required this.setState,
+  });
+
+  @override
+  State<_DomainSearchList> createState() => _DomainSearchListState();
+}
+
+class _DomainSearchListState extends State<_DomainSearchList> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final domains = widget.model.blockedDomains;
+    final filtered = _query.isEmpty
+        ? domains
+        : domains.where((d) => d.contains(_query.toLowerCase())).toList();
+
+    return Column(
+      children: [
+        TextField(
+          controller: _searchController,
+          decoration: const InputDecoration(
+            hintText: 'Search domains...',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (v) => setState(() => _query = v.toLowerCase()),
+        ),
+        const SizedBox(height: 8),
+        if (_query.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '${filtered.length} of ${domains.length} domains',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (_, i) {
+              final domain = filtered[i];
+              final isMatch = _query.isNotEmpty &&
+                  domain.contains(_query);
+              return ListTile(
+                dense: true,
+                title: Text(
+                  domain,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        isMatch ? FontWeight.bold : FontWeight.normal,
+                    color: isMatch ? Colors.teal : null,
                   ),
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.remove_circle_outline,
+                      size: 20, color: Colors.red),
+                  onPressed: () {
+                    widget.model.removeBlockedDomain(domain);
+                    widget.setState(() {});
+                  },
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
