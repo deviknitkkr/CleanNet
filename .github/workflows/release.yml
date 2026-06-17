@@ -39,10 +39,7 @@ jobs:
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release \
-          --target-platform android-arm64 \
-          --split-debug-info=build/debug-info \
-          --build-number=${{ github.run_number }}
+        run: flutter build apk --release --target-platform android-arm64 --split-debug-info=build/debug-info --build-number=${{ github.run_number }}
 
       - name: Extract version for release tag
         id: version
