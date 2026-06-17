@@ -36,6 +36,16 @@ public class MainActivity extends FlutterActivity {
                             stopVpn();
                             result.success(null);
                             break;
+                        case "getVpnState":
+                            result.success(DnsVpnService.isVpnRunning(this));
+                            break;
+                        case "getStats":
+                            result.success(DnsVpnService.getBlockedStatsSnapshot());
+                            break;
+                        case "resetStats":
+                            DnsVpnService.blockedStats.clear();
+                            result.success(null);
+                            break;
                         default:
                             result.notImplemented();
                     }

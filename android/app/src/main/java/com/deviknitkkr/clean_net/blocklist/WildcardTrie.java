@@ -11,12 +11,14 @@ public class WildcardTrie {
 
     /**
      * Inserts a domain pattern into the Trie.
+     * "example.com" blocks example.com and all its subdomains.
+     * "*.example.com" blocks all subdomains of example.com (not example.com itself).
      *
-     * @param domainPattern The domain pattern (e.g., "*.example.com").
+     * @param domainPattern The domain pattern (e.g., "*.example.com" or "example.com").
      */
     public void insert(String domainPattern) {
         if (domainPattern == null || domainPattern.isEmpty()) {
-            return; // Skip invalid patterns
+            return;
         }
 
         List<String> parts = splitAndReverseDomain(domainPattern);
@@ -24,11 +26,13 @@ public class WildcardTrie {
 
         for (String part : parts) {
             if (part.equals("*")) {
-                current.isWildcard = true; // Mark this node as a wildcard
-                break; // Wildcard matches all subdomains, so no need to go deeper
+                current.isWildcard = true;
+                break;
             }
             current = current.children.computeIfAbsent(part, k -> new TrieNode());
         }
+        // Also match all subdomains of an exact domain entry
+        current.isWildcard = true;
     }
 
     /**

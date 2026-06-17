@@ -1,16 +1,32 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class VpnModel extends ChangeNotifier {
   final SharedPreferences _prefs;
-  
+
   bool _isVpnEnabled = false;
   List<String> _blockedDomains = [];
-  String _dnsServer = '8.8.8.8';
+  String _dnsServer = '1.1.1.1';
   Map<String, int> _blockedStats = {};
-  static const String VPN_CHANNEL = 'com.deviknitkkr.clean_net/vpn';
-  final MethodChannel _vpnChannel = const MethodChannel(VPN_CHANNEL);
+  bool _isRefreshing = false;
+
+  static const String _vpnChannelName = 'com.deviknitkkr.clean_net/vpn';
+  final MethodChannel _vpnChannel = const MethodChannel(_vpnChannelName);
+
+  static const String blocklistUrl =
+      'https://raw.githubusercontent.com/deviknitkkr/CleanNet/main/blocklist.txt';
+
+  static const List<Map<String, String>> dnsPresets = [
+    {'name': 'Cloudflare', 'ip': '1.1.1.1'},
+    {'name': 'Google DNS', 'ip': '8.8.8.8'},
+    {'name': 'Quad9', 'ip': '9.9.9.9'},
+    {'name': 'OpenDNS', 'ip': '208.67.222.222'},
+    {'name': 'Comodo Secure', 'ip': '8.26.56.26'},
+    {'name': 'AdGuard DNS', 'ip': '94.140.14.14'},
+  ];
 
   VpnModel(this._prefs) {
     _loadPreferences();
@@ -18,66 +34,163 @@ class VpnModel extends ChangeNotifier {
 
   bool get isVpnEnabled => _isVpnEnabled;
   List<String> get blockedDomains => _blockedDomains;
+  int get blockedDomainsCount => _blockedDomains.length;
   String get dnsServer => _dnsServer;
   Map<String, int> get blockedStats => _blockedStats;
+  int get totalBlocked =>
+      _blockedStats.values.fold(0, (sum, v) => sum + v);
+  bool get isRefreshing => _isRefreshing;
 
   void _loadPreferences() {
     _isVpnEnabled = _prefs.getBool('vpn_enabled') ?? false;
     _blockedDomains = _prefs.getStringList('blocked_domains') ?? [];
-    _dnsServer = _prefs.getString('dns_server') ?? '8.8.8.8';
-    _blockedStats = Map<String, int>.from(
-      _prefs.getString('blocked_stats') != null
-          ? Map<String, dynamic>.from(
-              _prefs.getString('blocked_stats') as Map)
-          : {}
-    );
-    notifyListeners();
-  }
-
-  void toggleVpn() {
-    try {
-      if (_isVpnEnabled) {
-         _vpnChannel.invokeMethod('stopVpn');
-      } else {
-         _vpnChannel.invokeMethod('startVpn', {'dnsServer': _dnsServer, 'blockedDomains': _blockedDomains});
+    _dnsServer = _prefs.getString('dns_server') ?? '1.1.1.1';
+    final raw = _prefs.getString('blocked_stats');
+    if (raw != null) {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        _blockedStats = Map<String, int>.from(
+            decoded.map((k, v) => MapEntry(k.toString(), (v as num).toInt())));
       }
-      _isVpnEnabled = !_isVpnEnabled;
-      _prefs.setBool('vpn_enabled', _isVpnEnabled);
-      notifyListeners();
-    } catch (e) {
-      print('Error toggling VPN: $e');
     }
   }
 
-  void updateBlockedDomains(List<String> domains) {
-    _blockedDomains = domains;
-    _prefs.setStringList('blocked_domains', _blockedDomains);
+  Future<void> checkVpnState() async {
+    try {
+      final enabled = await _vpnChannel.invokeMethod<bool>('getVpnState');
+      if (enabled != null && enabled != _isVpnEnabled) {
+        _isVpnEnabled = enabled;
+        _prefs.setBool('vpn_enabled', _isVpnEnabled);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> refreshStats() async {
+    try {
+      final stats = await _vpnChannel
+          .invokeMethod<Map<Object?, Object?>>('getStats');
+      if (stats != null) {
+        _blockedStats = stats.map(
+            (k, v) => MapEntry(k.toString(), (v as num).toInt()));
+        _prefs.setString('blocked_stats', jsonEncode(_blockedStats));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> resetStats() async {
+    _blockedStats = {};
+    _prefs.setString('blocked_stats', jsonEncode(_blockedStats));
+    try {
+      await _vpnChannel.invokeMethod('resetStats');
+    } catch (_) {}
     notifyListeners();
   }
 
-  void updateDnsServer(String server) {
+  Future<void> toggleVpn() async {
+    try {
+      if (_isVpnEnabled) {
+        await _vpnChannel.invokeMethod('stopVpn');
+        _isVpnEnabled = false;
+      } else {
+        await _vpnChannel.invokeMethod('startVpn', {
+          'dnsServer': _dnsServer,
+          'blockedDomains': _blockedDomains,
+        });
+      _isVpnEnabled = true;
+      // Poll stats immediately after start
+      await Future.delayed(const Duration(seconds: 1));
+      await refreshStats();
+    }
+    _prefs.setBool('vpn_enabled', _isVpnEnabled);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error toggling VPN: $e');
+    }
+  }
 
+  Future<void> updateDnsServer(String server) async {
     _dnsServer = server;
     _prefs.setString('dns_server', _dnsServer);
     if (_isVpnEnabled) {
-      // Restart VPN with new DNS server
-       _vpnChannel.invokeMethod('stopVpn');
-       _vpnChannel.invokeMethod('startVpn', {'dnsServer': _dnsServer});
+      await _restartVpn();
     }
     notifyListeners();
   }
 
-  void updateBlockedStats(String domain) {
-    if (_blockedStats.containsKey(domain)) {
-      _blockedStats[domain] = (_blockedStats[domain] ?? 0) + 1;
-    } else {
-      _blockedStats[domain] = 1;
+  Future<void> updateBlockedDomains(List<String> domains) async {
+    _blockedDomains = domains;
+    _prefs.setStringList('blocked_domains', _blockedDomains);
+    if (_isVpnEnabled) {
+      await _restartVpn();
     }
-    _prefs.setString('blocked_stats', _blockedStats.toString());
     notifyListeners();
+  }
+
+  Future<void> addBlockedDomain(String domain) async {
+    final trimmed = domain.trim().toLowerCase();
+    if (trimmed.isEmpty || _blockedDomains.contains(trimmed)) return;
+    _blockedDomains.add(trimmed);
+    _prefs.setStringList('blocked_domains', _blockedDomains);
+    if (_isVpnEnabled) {
+      await _restartVpn();
+    }
+    notifyListeners();
+  }
+
+  void removeBlockedDomain(String domain) {
+    _blockedDomains.remove(domain);
+    _prefs.setStringList('blocked_domains', _blockedDomains);
+    if (_isVpnEnabled) {
+      _restartVpn();
+    }
+    notifyListeners();
+  }
+
+  Future<bool> refreshBlocklist() async {
+    _isRefreshing = true;
+    notifyListeners();
+
+    try {
+      final response = await http.get(Uri.parse(blocklistUrl));
+      if (response.statusCode == 200) {
+        final domains = response.body
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty && !l.startsWith('#'))
+            .map((l) {
+          if (l.startsWith('||')) return l.substring(2);
+          if (l.startsWith('|')) return l.substring(1);
+          return l;
+        }).toList();
+
+        _blockedDomains = domains;
+        _prefs.setStringList('blocked_domains', _blockedDomains);
+        if (_isVpnEnabled) {
+          _restartVpn();
+        }
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Error refreshing blocklist: $e');
+    } finally {
+      _isRefreshing = false;
+      notifyListeners();
+    }
+    return false;
+  }
+
+  Future<void> _restartVpn() async {
+    try {
+      await _vpnChannel.invokeMethod('stopVpn');
+      await Future.delayed(const Duration(milliseconds: 800));
+      await _vpnChannel.invokeMethod('startVpn', {
+        'dnsServer': _dnsServer,
+        'blockedDomains': _blockedDomains,
+      });
+    } catch (e) {
+      debugPrint('Error restarting VPN: $e');
+    }
   }
 }
-
-
-
-

@@ -1,0 +1,450 @@
+# CleanNet Ad/Tracker Blocklist
+# Format: one domain per line, * for wildcard subdomain matching
+#
+# Sources: EasyList, Peter Lowe's list, etc.
+# Last updated: 2026-06-17
+
+# --- Ad Networks ---
+doubleclick.net
+*.doubleclick.net
+googleads.g.doubleclick.net
+pubads.g.doubleclick.net
+adclick.g.doubleclick.net
+adservice.google.com
+*.adservice.google.com
+googlesyndication.com
+*.googlesyndication.com
+googletagservices.com
+*.googletagservices.com
+googletagmanager.com
+*.googletagmanager.com
+googleadservices.com
+*.googleadservices.com
+googleadslr.com
+*.googleadslr.com
+google-analytics.com
+*.google-analytics.com
+googletagmanager.com
+*.googletagmanager.com
+
+# --- AppLovin ---
+*.applovin.com
+d.applovin.com
+rt.applovin.com
+img.applovin.com
+res1.applovin.com
+a4.applovin.com
+a5.applovin.com
+sts.applovin.com
+prod-bid.applovin.com
+ms4.applvn.com
+*.applvn.com
+
+# --- Unity Ads ---
+*.unity3d.com
+*.unityads.unity3d.com
+unityads.unity3d.com
+auction.unityads.unity3d.com
+webview.unityads.unity3d.com
+adserver.unityads.unity3d.com
+*.iads.unity3d.com
+*.mediation.unity3d.com
+
+# --- Vungle ---
+*.vungle.com
+*.ads.vungle.com
+adx.ads.vungle.com
+logs.ads.vungle.com
+*.vungleads.com
+
+# --- InMobi ---
+*.inmobi.com
+ads.inmobi.com
+*.ssp.inmobi.com
+*.w.inmobi.com
+*.sdk.inmobi.com
+
+# --- Chartboost ---
+*.chartboost.com
+live.chartboost.com
+*.chartboostlive.com
+
+# --- Moloco ---
+*.moloco.com
+*.dsp-api.moloco.com
+*.sdkopmetrics.moloco.com
+
+# --- Bidmachine ---
+*.bidmachine.io
+api.bidmachine.io
+
+# --- Inner-Active / Ogury ---
+*.inner-active.mobi
+cdn2.inner-active.mobi
+wv.inner-active.mobi
+sdk-events.inner-active.mobi
+
+# --- Fingersoft ---
+*.fingersoft.net
+ads3.fingersoft.net
+fsid.fingersoft.net
+hcr2-f9.fingersoft.net
+acs3.fingersoft.net
+
+# --- AppsFlyer ---
+*.appsflyer.com
+*.appsflyersdk.com
+*.appsflyerit.com
+*.launches.appsflyersdk.com
+*.inapps.appsflyersdk.com
+*.appsflyer.cc
+*.onelink.me
+
+# --- Facebook Audience Network ---
+*.facebook.com
+*.fbcdn.net
+*.fbsbx.com
+*.facebook.net
+*.audience-network.com
+
+# --- Amazon Ads ---
+*.amazon-adsystem.com
+*.amazonadsi.com
+*.amazonmobileads.com
+*.amazon.com
+*.amazon.de
+*.amazon.co.uk
+*.amazon.co.jp
+*.amazon.fr
+*.amazon.ca
+*.amazon.it
+*.amazon.es
+
+# --- Yahoo / Verizon ---
+*.yahoo.com
+*.yahooapis.com
+*.yimg.com
+*.adtech.com
+*.adtech.de
+*.advertising.com
+*.overture.com
+*.flurry.com
+*.flurry.net
+
+# --- AdColony ---
+*.adcolony.com
+*.adcolony.net
+*.adcalls.com
+*.adcalls.net
+*.adcolony-https.com
+
+# --- Tapjoy ---
+*.tapjoy.com
+*.tapjoy.net
+*.tapjoyads.com
+
+# --- IronSource ---
+*.ironsrc.com
+*.ironsrc.net
+*.isnssdk.com
+*.supersonicads.com
+*.supersonic.com
+*.mopub.com
+
+# --- Start.io ---
+*.startapp.com
+*.startapp.net
+*.startappservice.com
+
+# --- AdMob ---
+admob.com
+*.admob.com
+admob.google.com
+
+# --- AdSense ---
+*.adsense.com
+*.adsense.google.com
+*.adsensecustomsearchads.com
+
+# --- Criteo ---
+*.criteo.com
+*.criteo.net
+*.criteo.de
+*.criteo.fr
+*.criteo.co.uk
+*.criteo.jp
+
+# --- Taboola ---
+*.taboola.com
+*.taboolanews.com
+*.taboolasyndication.com
+*.taboola-news.com
+
+# --- Outbrain ---
+*.outbrain.com
+*.outbrainimg.com
+*.odb.outbrain.com
+*.traffic.outbrain.com
+
+# --- SmartAdServer ---
+*.smartadserver.com
+*.smartadserver.fr
+*.smartadserver.co.uk
+*.smartadserver.de
+*.smartadserver.es
+*.smartadserver.it
+
+# --- Tradedesk ---
+*.adsrvr.org
+*.thetradedesk.com
+*.adserverpub.com
+
+# --- Index Exchange ---
+*.casalemedia.com
+*.indexww.com
+*.ixas.xyz
+*.invibes.com
+
+# --- Magnite / Rubicon ---
+*.rubiconproject.com
+*.magnite.com
+*.spotxchange.com
+*.spotx.tv
+
+# --- OpenX ---
+*.openx.net
+*.openx.com
+
+# --- PubMatic ---
+*.pubmatic.com
+*.pubmatic.net
+
+# --- Sharethrough ---
+*.sharethrough.com
+*.sharethrough.net
+
+# --- Sovrn ---
+*.sovrn.com
+*.sovrn.net
+*.viglink.com
+*.skimresources.com
+
+# --- Teads ---
+*.teads.tv
+*.teads.net
+*.teads.co
+
+# --- TripleLift ---
+*.triplelift.com
+*.triplelift.net
+
+# --- Media.net ---
+*.media.net
+*.media-servers.net
+
+# --- AdBlade ---
+*.adblade.com
+*.adblade.net
+*.content.ad
+
+# --- Revcontent ---
+*.revcontent.com
+*.revcontent.net
+*.revcontent-api.com
+
+# --- PropellerAds ---
+*.propellerads.com
+*.propellerclick.com
+*.propelleradserver.com
+*.onclickalgo.com
+
+# --- Adsterra ---
+*.adsterra.com
+*.adsterra.net
+*.adsterra.org
+
+# --- PopAds ---
+*.popads.net
+*.popadscdn.net
+*.popunder.net
+
+# --- ExoClick ---
+*.exoclick.com
+*.exoclick.net
+*.exosrv.com
+
+# --- MGID ---
+*.mgid.com
+*.mgid.net
+*.mgiddigital.com
+
+# --- AdPushup ---
+*.adpushup.com
+*.adpushup.net
+
+# --- Analytics & Tracking ---
+*.google-analytics.com
+*.googletagmanager.com
+*.googleadservices.com
+*.doubleclick.net
+*.facebook.com
+*.facebook.net
+*.twitter.com
+*.t.co
+*.scorecardresearch.com
+*.quantserve.com
+*.quantcast.com
+*.krxd.net
+*.moatads.com
+*.moat.com
+*.comscore.com
+*.comscoreresearch.com
+*.demdex.net
+*.adnxs.com
+*.segment.io
+*.segment.com
+*.amplitude.com
+*.mixpanel.com
+*.mparticle.com
+*.adjust.com
+*.adjust.net
+*.appboy.com
+*.braze.com
+*.branch.io
+*.branch.com
+*.kochava.com
+*.tenjin.io
+*.singular.net
+*.singular-ssp.com
+*.attribution.io
+*.appsflyer.com
+*.appsflyersdk.com
+*.firebaseio.com
+*.firebase.google.com
+firebaselogging.googleapis.com
+firebaselogging-pa.googleapis.com
+*.app-measurement.com
+app-measurement.com
+*.crashlytics.com
+*.fabric.io
+*.sentry.io
+*.datadoghq.com
+*.newrelic.com
+*.hockeyapp.net
+*.telemetry.mozilla.org
+*.telemetry.microsoft.com
+*.telemetry.tk0x1.com
+telemetry.tk0x1.com
+
+# --- Social Widgets (tracking) ---
+platform.twitter.com
+syndication.twitter.com
+*.twitter.com
+connect.facebook.net
+*.facebook.net
+platform.linkedin.com
+*.linkedin.com
+*.addthis.com
+*.addthiscdn.com
+*.sharethis.com
+*.shareaholic.com
+
+# --- Cryptominers ---
+*.coinhive.com
+*.coin-hive.com
+*.crypto-loot.com
+*.minero.cc
+*.monerominer.rocks
+*.coinimp.com
+*.coinerra.com
+*.coinpot.com
+*.webmine.pro
+*.miner.pr0.xyz
+
+# --- Malware / Phishing ---
+*.spamtracker.com
+*.tracker.bot
+*.malware.com
+*.phishing.com
+
+# --- Misc Ad / Spam ---
+*.adf.ly
+*.adfoc.us
+*.bc.vc
+*.shorte.st
+*.sh.st
+*.linkbucks.com
+*.celebjihad.com
+*.clk.sh
+*.destyy.com
+*.link.tl
+*.lnkload.com
+*.ouo.io
+*.ow.ly
+*.safelink.xyz
+*.shrinkearn.com
+*.tr.im
+*.tinyurl.com
+*.bit.ly
+*.bitly.com
+*.wp.me
+
+# --- Notification spam ---
+public.api.push.prod.com
+*.push.prod.com
+*.pushwoosh.com
+*.onesignal.com
+*.urbanairship.com
+*.parse.com
+*.pushalert.co
+*.notify.go
+*.notifica.com
+
+# --- Adult Ads ---
+exoclick.com
+*.exoclick.com
+juicyads.com
+*.juicyads.com
+trafficjunky.com
+*.trafficjunky.com
+*.trafficjunky.net
+*.adultfriendfinder.com
+
+# --- Newsletter / Email Tracking ---
+*.mailchimp.com
+*.mailchimp.net
+*.mailgun.com
+*.sendgrid.com
+*.sendgrid.net
+*.mailjet.com
+*.postmarkapp.com
+*.list-manage.com
+*.sendy.co
+*.mailer.lite.com
+*.customer.io
+*.iterable.com
+*.convertkit.com
+*.activecampaign.com
+*.getresponse.com
+*.aweber.com
+*.constantcontact.com
+
+# --- Generic Ad Patterns ---
+ad.*
+ads.*
+adserver.*
+advertising.*
+analytics.*
+tracking.*
+tracker.*
+metrics.*
+inspectlet.com
+*.inspectlet.com
+hotjar.com
+*.hotjar.com
+*.luckyorange.com
+*.mouseflow.com
+*.crazyegg.com
+*.clicktale.net
+*.fullstory.com
+*.sessioncam.com

@@ -10,65 +10,74 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   final vpnModel = VpnModel(prefs);
+  await vpnModel.checkVpnState();
   runApp(
     ChangeNotifierProvider.value(
       value: vpnModel,
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Modern VPN App',
+      title: 'CleanNet',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorSchemeSeed: Colors.teal,
         brightness: Brightness.dark,
         useMaterial3: true,
       ),
-      home: MainScreen(),
+      home: const MainScreen(),
     );
   }
 }
 
 class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
   @override
-  _MainScreenState createState() => _MainScreenState();
+  State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final List<Widget> _screens = [
-    HomeScreen(),
-    SettingsScreen(),
-    StatisticsScreen(),
-  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: const [
+          HomeScreen(),
+          SettingsScreen(),
+          StatisticsScreen(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+          setState(() => _currentIndex = index);
         },
-        destinations: [
+        destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home),
+            icon: Icon(Icons.shield_outlined),
+            selectedIcon: Icon(Icons.shield),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings),
+            icon: Icon(Icons.tune_outlined),
+            selectedIcon: Icon(Icons.tune),
             label: 'Settings',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart),
-            label: 'Statistics',
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
           ),
         ],
       ),

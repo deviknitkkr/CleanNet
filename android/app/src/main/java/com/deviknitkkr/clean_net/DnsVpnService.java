@@ -1,7 +1,12 @@
 package com.deviknitkkr.clean_net;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -18,32 +23,76 @@ import java.io.FileOutputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DnsVpnService extends VpnService {
     private static final String TAG = "DnsVpnService";
+    private static final String CHANNEL_ID = "clean_net_vpn";
+    private static final int NOTIFICATION_ID = 1;
+    private static final String PREFS_NAME = "clean_net_prefs";
+
     public static final String ACTION_START = "START";
     public static final String ACTION_STOP = "STOP";
     public static final String EXTRA_DNS_SERVER = "DNS_SERVER";
     public static final String EXTRA_BLOCKED_DOMAINS = "BLOCKED_DOMAINS";
+
+    public static volatile boolean isRunning = false;
+    public static final ConcurrentHashMap<String, AtomicInteger> blockedStats = new ConcurrentHashMap<>();
+
     private ParcelFileDescriptor vpnInterface = null;
     private WildcardTrie wildcardTrie;
-
     AtomicInteger count = new AtomicInteger();
     private String rootDns;
-
     Set<String> blockedDomains;
     private SubNetUtils subNetUtils = new SubNetUtils();
 
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "VPN Service",
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("Notification for ad blocking VPN service");
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(channel);
+        }
+    }
+
+    private Notification buildNotification() {
+        Intent tapIntent = new Intent(this, MainActivity.class);
+        tapIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 0, tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        int totalBlocked = 0;
+        Notification.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(this, CHANNEL_ID);
+        } else {
+            builder = new Notification.Builder(this);
+        }
+        return builder
+                .setContentTitle("CleanNet")
+                .setContentText("Ad blocking active — " + totalBlocked + " requests blocked")
+                .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+                .setContentIntent(pendingIntent)
+                .setOngoing(true)
+                .build();
+    }
+
     private List<InetAddress> getSystemDns() {
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-
         if (cm != null) {
             Network activeNetwork = cm.getActiveNetwork();
             return Optional.ofNullable(cm.getLinkProperties(activeNetwork))
@@ -59,7 +108,8 @@ public class DnsVpnService extends VpnService {
             String action = intent.getAction();
             if (ACTION_START.equals(action)) {
                 rootDns = intent.getStringExtra(EXTRA_DNS_SERVER);
-                blockedDomains = new HashSet<>(Objects.requireNonNull(intent.getStringArrayListExtra(EXTRA_BLOCKED_DOMAINS)));
+                blockedDomains = new HashSet<>(Objects.requireNonNull(
+                        intent.getStringArrayListExtra(EXTRA_BLOCKED_DOMAINS)));
                 wildcardTrie = new WildcardTrie();
                 startVpn();
             } else if (ACTION_STOP.equals(action)) {
@@ -90,30 +140,26 @@ public class DnsVpnService extends VpnService {
 
         if (vpnInterface == null) {
             Builder builder = new Builder()
-                    .setSession("DnsVpnService")
+                    .setSession("CleanNet")
                     .setMtu(1500);
 
-            // Add IPv4 address and routes
             if (ipv4Subnet != null) {
                 String ipv4Address = ipv4Subnet.split("/")[0];
-                builder.addAddress(ipv4Address, 24); // Add IPv4 address with prefix length
+                builder.addAddress(ipv4Address, 24);
                 for (int i = 1; i <= systemDns.size(); i++) {
                     String alias = subNetUtils.incrementIpAddress(ipv4Address, i);
-                    Log.d(TAG, "IPv4 DNS alias: " + alias);
-                    builder.addDnsServer(alias); // Add IPv4 DNS server
-                    builder.addRoute(alias, 32); // Add IPv4 route
+                    builder.addDnsServer(alias);
+                    builder.addRoute(alias, 32);
                 }
             }
 
-            // Add IPv6 address and routes
             if (ipv6Subnet != null) {
                 String ipv6Address = ipv6Subnet.split("/")[0];
-                builder.addAddress(ipv6Address, 64); // Add IPv6 address with prefix length
+                builder.addAddress(ipv6Address, 64);
                 for (int i = 1; i <= systemDns.size(); i++) {
                     String alias = subNetUtils.incrementIpAddress(ipv6Address, i);
-                    Log.d(TAG, "IPv6 DNS alias: " + alias);
-                    builder.addDnsServer(alias); // Add IPv6 DNS server
-                    builder.addRoute(alias, 128); // Add IPv6 route
+                    builder.addDnsServer(alias);
+                    builder.addRoute(alias, 128);
                 }
             }
 
@@ -126,27 +172,39 @@ public class DnsVpnService extends VpnService {
                 FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
                 FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
 
-
-                Log.d(TAG, "Setting up DNS handler");
                 DnsHandler dnsHandler = new DnsHandler.Builder()
                         .dnsServerIp(rootDns == null || rootDns.isBlank() ?
                                 systemDns.stream()
                                         .filter(x -> x instanceof Inet4Address)
                                         .map(InetAddress::getHostAddress)
                                         .findFirst()
-                                        .orElse("1.1.1.1") // In case no system dns
+                                        .orElse("1.1.1.1")
                                 : rootDns
                         )
                         .inputStream(in)
                         .outputStream(out)
                         .vpnService(this)
                         .dnsQueryCallback(domain -> {
-                            System.out.println(count.getAndIncrement() +". Received query for domain: " + domain);
-                            return wildcardTrie.matches(domain);
+                            Log.d(TAG, count.getAndIncrement() + ". Received query: " + domain);
+                            boolean blocked = wildcardTrie.matches(domain);
+                            if (blocked) {
+                                blockedStats.computeIfAbsent(domain, k -> new AtomicInteger()).incrementAndGet();
+                            }
+                            return blocked;
                         })
                         .build();
+
+                blockedDomains.forEach(x -> wildcardTrie.insert(x));
+                blockedStats.clear();
+
+                // Foreground service
+                createNotificationChannel();
+                startForeground(NOTIFICATION_ID, buildNotification());
+
                 new Thread(dnsHandler).start();
-                blockedDomains.forEach(x -> wildcardTrie.insert(x)); // Costly so doing it after starting the vpn
+
+                isRunning = true;
+                saveVpnState(true);
             } catch (Exception e) {
                 Log.e(TAG, "Error starting VPN: ", e);
                 stopVpn();
@@ -155,7 +213,9 @@ public class DnsVpnService extends VpnService {
     }
 
     private void stopVpn() {
-        Log.e(TAG, "Stopping DNS Proxy");
+        Log.d(TAG, "Stopping DNS Proxy");
+        isRunning = false;
+        saveVpnState(false);
         if (vpnInterface != null) {
             try {
                 vpnInterface.close();
@@ -164,7 +224,27 @@ public class DnsVpnService extends VpnService {
             }
             vpnInterface = null;
         }
+        blockedStats.clear();
+        stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
+    }
+
+    private void saveVpnState(boolean enabled) {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        prefs.edit().putBoolean("vpn_enabled", enabled).apply();
+    }
+
+    public static boolean isVpnRunning(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        return prefs.getBoolean("vpn_enabled", false);
+    }
+
+    public static Map<String, Integer> getBlockedStatsSnapshot() {
+        Map<String, Integer> snapshot = new HashMap<>();
+        for (Map.Entry<String, AtomicInteger> entry : blockedStats.entrySet()) {
+            snapshot.put(entry.getKey(), entry.getValue().get());
+        }
+        return snapshot;
     }
 
     @Override
