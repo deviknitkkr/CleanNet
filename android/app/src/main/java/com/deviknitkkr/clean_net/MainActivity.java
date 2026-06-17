@@ -46,6 +46,13 @@ public class MainActivity extends FlutterActivity {
                             DnsVpnService.blockedStats.clear();
                             result.success(null);
                             break;
+                        case "getLogs":
+                            result.success(AppLogBuffer.getInstance().getLogs());
+                            break;
+                        case "clearLogs":
+                            AppLogBuffer.getInstance().clear();
+                            result.success(null);
+                            break;
                         default:
                             result.notImplemented();
                     }

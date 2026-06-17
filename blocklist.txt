@@ -101,11 +101,12 @@ acs3.fingersoft.net
 *.onelink.me
 
 # --- Facebook Audience Network ---
-*.facebook.com
 *.fbcdn.net
 *.fbsbx.com
-*.facebook.net
 *.audience-network.com
+an.facebook.com
+pixel.facebook.com
+pixel.ads.fb.com
 
 # --- Amazon Ads ---
 *.amazon-adsystem.com
@@ -287,9 +288,6 @@ admob.google.com
 *.googletagmanager.com
 *.googleadservices.com
 *.doubleclick.net
-*.facebook.com
-*.facebook.net
-*.twitter.com
 *.t.co
 *.scorecardresearch.com
 *.quantserve.com
@@ -339,9 +337,7 @@ telemetry.tk0x1.com
 # --- Social Widgets (tracking) ---
 platform.twitter.com
 syndication.twitter.com
-*.twitter.com
 connect.facebook.net
-*.facebook.net
 platform.linkedin.com
 *.linkedin.com
 *.addthis.com
@@ -440,6 +436,10 @@ trafficjunky.com
 *.sessioncam.com
 
 # --- Social / Platform Ads ---
+ads.instagram.com
+pixel.instagram.com
+graph.instagram.com
+graph-fallback.instagram.com
 ads-api.twitter.com
 static.ads-twitter.com
 *.ads.twitter.com

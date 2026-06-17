@@ -12,6 +12,7 @@ class VpnModel extends ChangeNotifier {
   List<String> _blockedDomains = [];
   String _dnsServer = '1.1.1.1';
   Map<String, int> _blockedStats = {};
+  List<String> _logs = [];
   bool _isRefreshing = false;
 
   static const String _vpnChannelName = 'com.deviknitkkr.clean_net/vpn';
@@ -41,6 +42,7 @@ class VpnModel extends ChangeNotifier {
   Map<String, int> get blockedStats => _blockedStats;
   int get totalBlocked =>
       _blockedStats.values.fold(0, (sum, v) => sum + v);
+  List<String> get logs => _logs;
   bool get isRefreshing => _isRefreshing;
 
   void _loadPreferences() {
@@ -86,6 +88,24 @@ class VpnModel extends ChangeNotifier {
     _prefs.setString('blocked_stats', jsonEncode(_blockedStats));
     try {
       await _vpnChannel.invokeMethod('resetStats');
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> fetchLogs() async {
+    try {
+      final logs = await _vpnChannel.invokeMethod<List<Object?>>('getLogs');
+      if (logs != null) {
+        _logs = logs.map((e) => e.toString()).toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> clearLogs() async {
+    _logs = [];
+    try {
+      await _vpnChannel.invokeMethod('clearLogs');
     } catch (_) {}
     notifyListeners();
   }

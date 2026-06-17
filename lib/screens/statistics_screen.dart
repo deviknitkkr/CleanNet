@@ -18,7 +18,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 2), (_) {
-      context.read<VpnModel>().refreshStats();
+      final model = context.read<VpnModel>();
+      model.refreshStats();
+      model.fetchLogs();
     });
   }
 
@@ -140,6 +142,48 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
               ],
+              const SizedBox(height: 24),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Logs',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: context.read<VpnModel>().clearLogs,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  itemCount: model.logs.length,
+                  itemBuilder: (context, i) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 1, horizontal: 4),
+                      child: Text(
+                        model.logs[i],
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: Colors.grey,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         );
