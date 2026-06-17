@@ -2,7 +2,7 @@
 # Format: one domain per line, * for wildcard subdomain matching
 #
 # Sources: EasyList, Peter Lowe's list, etc.
-# Last updated: 2026-06-17
+# Last updated: 2026-06-19
 
 # --- Ad Networks ---
 doubleclick.net
@@ -429,18 +429,8 @@ trafficjunky.com
 *.aweber.com
 *.constantcontact.com
 
-# --- Generic Ad Patterns ---
-ad.*
-ads.*
-adserver.*
-advertising.*
-analytics.*
-tracking.*
-tracker.*
-metrics.*
-inspectlet.com
+# --- Session Replay / Heatmap ---
 *.inspectlet.com
-hotjar.com
 *.hotjar.com
 *.luckyorange.com
 *.mouseflow.com

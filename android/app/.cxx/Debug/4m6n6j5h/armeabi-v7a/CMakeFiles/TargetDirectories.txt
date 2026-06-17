@@ -1,2 +1,0 @@
-C:/Users/vikas/Desktop/projects/CleanNet/android/app/.cxx/Debug/4m6n6j5h/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/Users/vikas/Desktop/projects/CleanNet/android/app/.cxx/Debug/4m6n6j5h/armeabi-v7a/CMakeFiles/rebuild_cache.dir
