@@ -85,7 +85,13 @@ wv.inner-active.mobi
 sdk-events.inner-active.mobi
 
 # --- Fingersoft ---
+ads.fingersoft.net
+ads2.fingersoft.net
 ads3.fingersoft.net
+tracking.fingersoft.net
+analytics.fingersoft.net
+events.fingersoft.net
+data.fingersoft.net
 
 # --- AppsFlyer ---
 *.appsflyer.com
@@ -436,6 +442,8 @@ ads.instagram.com
 pixel.instagram.com
 graph.instagram.com
 graph-fallback.instagram.com
+analytics.instagram.com
+platform.instagram.com
 ads-api.twitter.com
 static.ads-twitter.com
 *.ads.twitter.com

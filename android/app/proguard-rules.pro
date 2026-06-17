@@ -1,0 +1,7 @@
+-keep class org.xbill.DNS.** { *; }
+-keep class org.pcap4j.** { *; }
+-dontwarn lombok.**
+-dontwarn org.slf4j.**
+-dontwarn sun.net.spi.nameservice.**
+-dontwarn com.sun.jna.**
+-dontwarn javax.naming.**
