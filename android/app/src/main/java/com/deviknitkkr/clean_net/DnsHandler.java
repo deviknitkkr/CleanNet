@@ -336,7 +336,7 @@ public class DnsHandler implements Runnable {
             return this;
         }
 
-        public DnsHandler build() throws SocketException, UnknownHostException {
+        public DnsHandler build() throws SocketException, UnknownHostException, IOException {
             if (dnsServerIp == null || inputStream == null || outputStream == null || vpnService == null) {
                 throw new IllegalStateException("DNS server IP, InputStream, OutputStream, and VpnService are required");
             }
