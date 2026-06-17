@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -48,10 +50,13 @@ jobs:
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION-b${{ github.run_number }}" >> $GITHUB_OUTPUT
 
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/CleanNet.apk
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "CleanNet ${{ steps.version.outputs.name }} (build ${{ github.run_number }})"
-          files: build/app/outputs/flutter-apk/app-release.apk
-          generate_release_notes: true
+          files: build/app/outputs/flutter-apk/CleanNet.apk
+          generate_release_notes: false
