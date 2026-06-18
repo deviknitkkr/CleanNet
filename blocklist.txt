@@ -131,14 +131,6 @@ aax-us-east.amazon-adsystem.com
 amazonadsi.com
 *.amazonmobileads.com
 amazonmobileads.com
-*.amazon.com
-*.amazon.de
-*.amazon.co.uk
-*.amazon.co.jp
-*.amazon.fr
-*.amazon.ca
-*.amazon.it
-*.amazon.es
 ad-tech.amazon.com
 ads-cdn.amazon.com
 unified-id.amazon.com
