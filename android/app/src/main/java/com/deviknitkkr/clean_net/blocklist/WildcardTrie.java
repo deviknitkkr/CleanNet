@@ -16,7 +16,7 @@ public class WildcardTrie {
         String[] parts = domainPattern.split("\\.");
         int len = parts.length;
 
-        if (len > 0 && "*".equals(parts[0])) {
+        if (len > 0 && "*".equals(parts[len - 1])) {
             return;
         }
 
