@@ -48,7 +48,7 @@ class VpnModel extends ChangeNotifier {
   void _loadPreferences() {
     _isVpnEnabled = _prefs.getBool('vpn_enabled') ?? false;
     _blockedDomains = _prefs.getStringList('blocked_domains') ?? [];
-    _dnsServer = _prefs.getString('dns_server') ?? '1.1.1.1';
+    _dnsServer = _prefs.getString('dns_server') ?? '';
     final raw = _prefs.getString('blocked_stats');
     if (raw != null) {
       final decoded = jsonDecode(raw);

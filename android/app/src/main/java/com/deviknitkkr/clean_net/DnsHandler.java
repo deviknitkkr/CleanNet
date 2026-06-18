@@ -32,8 +32,8 @@ import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -53,9 +53,19 @@ public class DnsHandler implements Runnable {
 
     private final DatagramChannel dnsChannel;
     private final Selector selector;
-    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocate(BUFFER_SIZE);
-    private final Map<String, CachedDnsResponse> dnsCache = new HashMap<>();
-    private final Map<Integer, PendingQuery> pendingQueries = new HashMap<>();
+    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocateDirect(BUFFER_SIZE);
+    private final Map<String, CachedDnsResponse> dnsCache = new LinkedHashMap<String, CachedDnsResponse>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, CachedDnsResponse> eldest) {
+            return size() > 1024;
+        }
+    };
+    private final Map<Integer, PendingQuery> pendingQueries = new LinkedHashMap<Integer, PendingQuery>(16, 0.75f, false) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Integer, PendingQuery> eldest) {
+            return size() > MAX_PENDING;
+        }
+    };
     private final AppLogBuffer appLog = AppLogBuffer.getInstance();
 
     private volatile boolean running = true;
@@ -158,6 +168,8 @@ public class DnsHandler implements Runnable {
     }
 
     private void handleDnsRequest(byte[] packetData) {
+        if (!isDnsPacket(packetData)) return;
+
         IpPacket parsedPacket = parseIpPacket(packetData);
         if (parsedPacket == null) return;
 
@@ -178,17 +190,17 @@ public class DnsHandler implements Runnable {
         }
 
         CachedDnsResponse cached = dnsCache.get(dnsQueryName);
-        if (cached != null && cached.isValid()) {
-            try {
-                sendResponse(parsedPacket, cached.data);
-            } catch (IOException ignored) {}
-            return;
+        if (cached != null) {
+            if (cached.isValid()) {
+                try {
+                    sendResponse(parsedPacket, cached.data);
+                } catch (IOException ignored) {}
+                return;
+            }
+            dnsCache.remove(dnsQueryName);
         }
 
-        if (pendingQueries.size() >= MAX_PENDING) {
-            pendingQueries.values().removeIf(p -> p.queryName.equals(dnsQueryName));
-            if (pendingQueries.size() >= MAX_PENDING) return;
-        }
+        pendingQueries.values().removeIf(p -> p.queryName.equals(dnsQueryName));
 
         int txnId = ((dnsRawData[0] & 0xFF) << 8) | (dnsRawData[1] & 0xFF);
         int serverPort = parsedUdp.getHeader().getDstPort().valueAsInt();
@@ -196,19 +208,12 @@ public class DnsHandler implements Runnable {
 
         try {
             InetSocketAddress target = new InetSocketAddress(dnsServer, serverPort);
-            boolean sent = false;
-            for (int i = 0; i < 5; i++) {
-                int n = dnsChannel.send(sendBuffer, target);
-                if (n > 0) { sent = true; break; }
-                sendBuffer.rewind();
-                Thread.yield();
-            }
-            if (sent) {
+            if (dnsChannel.send(sendBuffer, target) > 0) {
                 pendingQueries.put(txnId, new PendingQuery(parsedPacket, dnsQueryName, System.currentTimeMillis()));
+                Log.d(TAG, "Forwarding: " + dnsQueryName);
             } else {
                 appLog.log(TAG, "Drop (send fail): " + dnsQueryName);
             }
-            Log.d(TAG, "Forwarding: " + dnsQueryName);
         } catch (IOException e) {
             Log.e(TAG, "Error forwarding " + dnsQueryName, e);
         }
@@ -276,6 +281,26 @@ public class DnsHandler implements Runnable {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    private static boolean isDnsPacket(byte[] buf) {
+        if (buf.length < 28) return false;
+        int version = (buf[0] >> 4) & 0x0F;
+        int udpOffset;
+        if (version == 4) {
+            int ihl = (buf[0] & 0x0F) * 4;
+            if (buf.length < ihl + 8) return false;
+            if (buf[9] != 17) return false;
+            udpOffset = ihl;
+        } else if (version == 6) {
+            if (buf.length < 48) return false;
+            if (buf[6] != 17) return false;
+            udpOffset = 40;
+        } else {
+            return false;
+        }
+        int dstPort = ((buf[udpOffset + 2] & 0xFF) << 8) | (buf[udpOffset + 3] & 0xFF);
+        return dstPort == 53;
     }
 
     @NonNull
