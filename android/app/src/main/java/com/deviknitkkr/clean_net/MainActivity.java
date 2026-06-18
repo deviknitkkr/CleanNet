@@ -53,6 +53,13 @@ public class MainActivity extends FlutterActivity {
                             AppLogBuffer.getInstance().clear();
                             result.success(null);
                             break;
+                        case "updateBlocklist":
+                            List<String> newDomains = call.argument("blockedDomains");
+                            if (newDomains != null) {
+                                DnsVpnService.updateBlocklist(newDomains);
+                            }
+                            result.success(null);
+                            break;
                         default:
                             result.notImplemented();
                     }

@@ -48,12 +48,37 @@ public class DnsVpnService extends VpnService {
     public static final ConcurrentHashMap<String, AtomicInteger> blockedStats = new ConcurrentHashMap<>();
 
     private ParcelFileDescriptor vpnInterface = null;
-    private WildcardTrie wildcardTrie;
+    private volatile WildcardTrie wildcardTrie;
+    private DnsHandler dnsHandler;
     AtomicInteger count = new AtomicInteger();
     private String rootDns;
     Set<String> blockedDomains;
     private SubNetUtils subNetUtils = new SubNetUtils();
     private Thread notificationUpdater;
+
+    private static volatile DnsVpnService activeInstance;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        activeInstance = this;
+    }
+
+    public static void updateBlocklist(List<String> domains) {
+        DnsVpnService instance = activeInstance;
+        if (instance != null) {
+            instance.buildAndSwapBlocklist(domains);
+        }
+    }
+
+    private void buildAndSwapBlocklist(List<String> domains) {
+        WildcardTrie newTrie = new WildcardTrie();
+        for (String domain : domains) {
+            newTrie.insert(domain);
+        }
+        wildcardTrie = newTrie;
+        Log.d(TAG, "Blocklist updated: " + domains.size() + " domains");
+    }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -184,7 +209,7 @@ public class DnsVpnService extends VpnService {
                 FileInputStream in = new FileInputStream(vpnInterface.getFileDescriptor());
                 FileOutputStream out = new FileOutputStream(vpnInterface.getFileDescriptor());
 
-                DnsHandler dnsHandler = new DnsHandler.Builder()
+                dnsHandler = new DnsHandler.Builder()
                         .dnsServerIp(rootDns == null || rootDns.isBlank() ?
                                 systemDns.stream()
                                         .filter(x -> x instanceof Inet4Address)
@@ -278,6 +303,7 @@ public class DnsVpnService extends VpnService {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        activeInstance = null;
         stopVpn();
     }
 }

@@ -11,13 +11,8 @@ import org.pcap4j.packet.IpV4Packet;
 import org.pcap4j.packet.IpV6Packet;
 import org.pcap4j.packet.UdpPacket;
 import org.pcap4j.packet.UnknownPacket;
-import org.xbill.DNS.DClass;
-import org.xbill.DNS.Flags;
 import org.xbill.DNS.Message;
 import org.xbill.DNS.Name;
-import org.xbill.DNS.Rcode;
-import org.xbill.DNS.SOARecord;
-import org.xbill.DNS.Section;
 import org.xbill.DNS.TextParseException;
 
 import java.io.FileInputStream;
@@ -33,8 +28,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 public class DnsHandler implements Runnable {
@@ -46,37 +41,48 @@ public class DnsHandler implements Runnable {
     private static final int PENDING_CLEANUP_MS = 10_000;
 
     private final InetAddress dnsServer;
-    private final Predicate<String> dnsQueryCallback;
+    private volatile Predicate<String> dnsQueryCallback;
     private final FileInputStream inputStream;
     private final FileOutputStream outputStream;
     private final VpnService vpnService;
 
     private final DatagramChannel dnsChannel;
     private final Selector selector;
-    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocateDirect(BUFFER_SIZE);
-    private final Map<String, CachedDnsResponse> dnsCache = new LinkedHashMap<String, CachedDnsResponse>(16, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, CachedDnsResponse> eldest) {
-            return size() > 1024;
-        }
-    };
-    private final Map<Integer, PendingQuery> pendingQueries = new LinkedHashMap<Integer, PendingQuery>(16, 0.75f, false) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<Integer, PendingQuery> eldest) {
-            return size() > MAX_PENDING;
-        }
-    };
+    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocate(BUFFER_SIZE);
+    private final Map<String, CachedDnsResponse> dnsCache = new ConcurrentHashMap<>();
+    private final Map<Integer, PendingQuery> pendingQueries = new ConcurrentHashMap<>();
     private final AppLogBuffer appLog = AppLogBuffer.getInstance();
 
     private volatile boolean running = true;
 
-    SOARecord blockedSoaResponse;
-
-    {
+    private static final byte[] NXDOMAIN_SOA_BYTES;
+    static {
         try {
-            Name name = Name.fromString("blocked.example.com.");
+            Name origin = Name.fromString("blocked.example.com.");
             Name mbox = Name.fromString("admin.example.com.");
-            blockedSoaResponse = new SOARecord(name, DClass.IN, 300, name, mbox, 1, 3600, 600, 86400, 300);
+            byte[] mnameBytes = origin.toWire();
+            byte[] rnameBytes = mbox.toWire();
+
+            int rdataLen = mnameBytes.length + rnameBytes.length + 20;
+            ByteBuffer rdata = ByteBuffer.allocate(rdataLen);
+            rdata.put(mnameBytes);
+            rdata.put(rnameBytes);
+            rdata.putInt(1);
+            rdata.putInt(3600);
+            rdata.putInt(600);
+            rdata.putInt(86400);
+            rdata.putInt(300);
+
+            int soaLen = mnameBytes.length + 10 + rdataLen;
+            ByteBuffer soa = ByteBuffer.allocate(soaLen);
+            soa.put(mnameBytes);
+            soa.putShort((short) 6);
+            soa.putShort((short) 1);
+            soa.putInt(300);
+            soa.putShort((short) rdataLen);
+            soa.put(rdata.array(), 0, rdataLen);
+
+            NXDOMAIN_SOA_BYTES = Arrays.copyOf(soa.array(), soaLen);
         } catch (TextParseException e) {
             throw new RuntimeException(e);
         }
@@ -95,6 +101,10 @@ public class DnsHandler implements Runnable {
 
         this.selector = Selector.open();
         this.dnsChannel.register(this.selector, SelectionKey.OP_READ);
+    }
+
+    public void updateBlocklist(Predicate<String> newCallback) {
+        this.dnsQueryCallback = newCallback;
     }
 
     @Override
@@ -168,8 +178,6 @@ public class DnsHandler implements Runnable {
     }
 
     private void handleDnsRequest(byte[] packetData) {
-        if (!isDnsPacket(packetData)) return;
-
         IpPacket parsedPacket = parseIpPacket(packetData);
         if (parsedPacket == null) return;
 
@@ -185,7 +193,7 @@ public class DnsHandler implements Runnable {
         if (dnsQueryCallback.test(dnsQueryName)) {
             appLog.log(TAG, "Blocking: " + dnsQueryName);
             Log.d(TAG, "Blocking: " + dnsQueryName);
-            blockDnsQuery(parsedPacket, dnsMsg);
+            blockDnsQuery(parsedPacket, dnsRawData);
             return;
         }
 
@@ -200,7 +208,9 @@ public class DnsHandler implements Runnable {
             dnsCache.remove(dnsQueryName);
         }
 
-        pendingQueries.values().removeIf(p -> p.queryName.equals(dnsQueryName));
+        if (pendingQueries.size() >= MAX_PENDING) {
+            pendingQueries.values().removeIf(p -> p.queryName.equals(dnsQueryName));
+        }
 
         int txnId = ((dnsRawData[0] & 0xFF) << 8) | (dnsRawData[1] & 0xFF);
         int serverPort = parsedUdp.getHeader().getDstPort().valueAsInt();
@@ -208,7 +218,14 @@ public class DnsHandler implements Runnable {
 
         try {
             InetSocketAddress target = new InetSocketAddress(dnsServer, serverPort);
-            if (dnsChannel.send(sendBuffer, target) > 0) {
+            boolean sent = false;
+            for (int i = 0; i < 5; i++) {
+                int n = dnsChannel.send(sendBuffer, target);
+                if (n > 0) { sent = true; break; }
+                sendBuffer.rewind();
+                try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            if (sent) {
                 pendingQueries.put(txnId, new PendingQuery(parsedPacket, dnsQueryName, System.currentTimeMillis()));
                 Log.d(TAG, "Forwarding: " + dnsQueryName);
             } else {
@@ -226,12 +243,19 @@ public class DnsHandler implements Runnable {
         }
     }
 
-    private void blockDnsQuery(IpPacket requestPacket, Message dnsMsg) {
+    private void blockDnsQuery(IpPacket requestPacket, byte[] requestDnsRaw) {
         try {
-            dnsMsg.getHeader().setFlag(Flags.QR);
-            dnsMsg.getHeader().setRcode(Rcode.NXDOMAIN);
-            dnsMsg.addRecord(blockedSoaResponse, Section.AUTHORITY);
-            IpPacket ipOutPacket = generateResponsePacket(requestPacket, dnsMsg.toWire());
+            byte[] responseDnsBytes = Arrays.copyOf(requestDnsRaw, requestDnsRaw.length + NXDOMAIN_SOA_BYTES.length);
+            responseDnsBytes[2] = (byte) (0x81 | (requestDnsRaw[2] & 0x01));
+            responseDnsBytes[3] = (byte) 0x83;
+            responseDnsBytes[6] = 0;
+            responseDnsBytes[7] = 0;
+            responseDnsBytes[8] = 0;
+            responseDnsBytes[9] = 1;
+            responseDnsBytes[10] = 0;
+            responseDnsBytes[11] = 0;
+            System.arraycopy(NXDOMAIN_SOA_BYTES, 0, responseDnsBytes, requestDnsRaw.length, NXDOMAIN_SOA_BYTES.length);
+            IpPacket ipOutPacket = generateResponsePacket(requestPacket, responseDnsBytes);
             synchronized (outputStream) {
                 outputStream.write(ipOutPacket.getRawData());
             }
@@ -281,26 +305,6 @@ public class DnsHandler implements Runnable {
         } catch (IOException e) {
             return null;
         }
-    }
-
-    private static boolean isDnsPacket(byte[] buf) {
-        if (buf.length < 28) return false;
-        int version = (buf[0] >> 4) & 0x0F;
-        int udpOffset;
-        if (version == 4) {
-            int ihl = (buf[0] & 0x0F) * 4;
-            if (buf.length < ihl + 8) return false;
-            if (buf[9] != 17) return false;
-            udpOffset = ihl;
-        } else if (version == 6) {
-            if (buf.length < 48) return false;
-            if (buf[6] != 17) return false;
-            udpOffset = 40;
-        } else {
-            return false;
-        }
-        int dstPort = ((buf[udpOffset + 2] & 0xFF) << 8) | (buf[udpOffset + 3] & 0xFF);
-        return dstPort == 53;
     }
 
     @NonNull

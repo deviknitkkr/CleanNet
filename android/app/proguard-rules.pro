@@ -1,5 +1,11 @@
 -keep class org.xbill.DNS.** { *; }
--keep class org.pcap4j.** { *; }
+-keep class org.pcap4j.packet.IpPacket** { *; }
+-keep class org.pcap4j.packet.IpSelector** { *; }
+-keep class org.pcap4j.packet.IpV4Packet** { *; }
+-keep class org.pcap4j.packet.IpV6Packet** { *; }
+-keep class org.pcap4j.packet.UdpPacket** { *; }
+-keep class org.pcap4j.packet.UnknownPacket** { *; }
+-keep class org.pcap4j.packet.factory.** { *; }
 -dontwarn lombok.**
 -dontwarn org.slf4j.**
 -dontwarn sun.net.spi.nameservice.**

@@ -145,7 +145,7 @@ class VpnModel extends ChangeNotifier {
     _blockedDomains = domains;
     _prefs.setStringList('blocked_domains', _blockedDomains);
     if (_isVpnEnabled) {
-      await _restartVpn();
+      await _updateBlocklist();
     }
     notifyListeners();
   }
@@ -156,7 +156,7 @@ class VpnModel extends ChangeNotifier {
     _blockedDomains.add(trimmed);
     _prefs.setStringList('blocked_domains', _blockedDomains);
     if (_isVpnEnabled) {
-      await _restartVpn();
+      await _updateBlocklist();
     }
     notifyListeners();
   }
@@ -165,7 +165,7 @@ class VpnModel extends ChangeNotifier {
     _blockedDomains.remove(domain);
     _prefs.setStringList('blocked_domains', _blockedDomains);
     if (_isVpnEnabled) {
-      _restartVpn();
+      _updateBlocklist();
     }
     notifyListeners();
   }
@@ -190,7 +190,7 @@ class VpnModel extends ChangeNotifier {
         _blockedDomains = domains;
         _prefs.setStringList('blocked_domains', _blockedDomains);
         if (_isVpnEnabled) {
-          _restartVpn();
+          await _updateBlocklist();
         }
         return true;
       }
@@ -201,6 +201,14 @@ class VpnModel extends ChangeNotifier {
       notifyListeners();
     }
     return false;
+  }
+
+  Future<void> _updateBlocklist() async {
+    try {
+      await _vpnChannel.invokeMethod('updateBlocklist', {
+        'blockedDomains': _blockedDomains,
+      });
+    } catch (_) {}
   }
 
   Future<void> _restartVpn() async {
