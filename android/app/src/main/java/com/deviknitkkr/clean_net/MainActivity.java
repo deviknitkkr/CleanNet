@@ -43,7 +43,7 @@ public class MainActivity extends FlutterActivity {
                             result.success(DnsVpnService.getBlockedStatsSnapshot());
                             break;
                         case "resetStats":
-                            DnsVpnService.blockedStats.clear();
+                            DnsVpnService.resetBlockedStats();
                             result.success(null);
                             break;
                         case "getLogs":

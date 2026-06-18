@@ -30,8 +30,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class DnsVpnService extends VpnService {
     private static final String TAG = "DnsVpnService";
@@ -45,15 +43,12 @@ public class DnsVpnService extends VpnService {
     public static final String EXTRA_BLOCKED_DOMAINS = "BLOCKED_DOMAINS";
 
     public static volatile boolean isRunning = false;
-    public static final ConcurrentHashMap<String, AtomicInteger> blockedStats = new ConcurrentHashMap<>();
+    private static final Map<String, int[]> blockedStats = new HashMap<>();
 
     private ParcelFileDescriptor vpnInterface = null;
     private volatile WildcardTrie wildcardTrie;
     private DnsHandler dnsHandler;
-    AtomicInteger count = new AtomicInteger();
     private String rootDns;
-    Set<String> blockedDomains;
-    private SubNetUtils subNetUtils = new SubNetUtils();
     private Thread notificationUpdater;
 
     private static volatile DnsVpnService activeInstance;
@@ -101,10 +96,11 @@ public class DnsVpnService extends VpnService {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        int totalBlocked = 0;
-        for (AtomicInteger v : blockedStats.values()) {
-            totalBlocked += v.get();
+        int totalBlocked;
+        synchronized (blockedStats) {
+            totalBlocked = blockedStats.values().stream().mapToInt(v -> v[0]).sum();
         }
+
         Notification.Builder builder;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder = new Notification.Builder(this, CHANNEL_ID);
@@ -113,7 +109,7 @@ public class DnsVpnService extends VpnService {
         }
         return builder
                 .setContentTitle("CleanNet")
-                .setContentText("Ad blocking active — " + totalBlocked + " requests blocked")
+                .setContentText("Ad blocking active \u2014 " + totalBlocked + " requests blocked")
                 .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -137,16 +133,14 @@ public class DnsVpnService extends VpnService {
             String action = intent.getAction();
             if (ACTION_START.equals(action)) {
                 rootDns = intent.getStringExtra(EXTRA_DNS_SERVER);
-                blockedDomains = new HashSet<>(Objects.requireNonNull(
+                Set<String> blockedDomains = new HashSet<>(Objects.requireNonNull(
                         intent.getStringArrayListExtra(EXTRA_BLOCKED_DOMAINS)));
                 wildcardTrie = new WildcardTrie();
-                startVpn();
+                startVpn(blockedDomains);
             } else if (ACTION_STOP.equals(action)) {
                 stopVpn();
             }
         } else {
-            // Service restarted by system after death — VPN interface is gone.
-            // Update persisted state so UI reflects reality.
             Log.d(TAG, "Service restarted with null intent, VPN no longer active");
             isRunning = false;
             saveVpnState(false);
@@ -156,7 +150,8 @@ public class DnsVpnService extends VpnService {
         return START_STICKY;
     }
 
-    private void startVpn() {
+    private void startVpn(Set<String> blockedDomains) {
+        SubNetUtils subNetUtils = new SubNetUtils();
         List<String> localSubnets = subNetUtils.getLocalSubnets();
         Map<String, String> availableSubnets = subNetUtils.findAvailableSubnets(localSubnets);
 
@@ -222,19 +217,25 @@ public class DnsVpnService extends VpnService {
                         .outputStream(out)
                         .vpnService(this)
                         .dnsQueryCallback(domain -> {
-                            Log.d(TAG, count.getAndIncrement() + ". Received query: " + domain);
+                            Log.d(TAG, "Received query: " + domain);
                             boolean blocked = wildcardTrie.matches(domain);
                             if (blocked) {
-                                blockedStats.computeIfAbsent(domain, k -> new AtomicInteger()).incrementAndGet();
+                                synchronized (blockedStats) {
+                                    blockedStats.computeIfAbsent(domain, k -> new int[1])[0]++;
+                                }
                             }
                             return blocked;
                         })
                         .build();
 
-                blockedDomains.forEach(x -> wildcardTrie.insert(x));
-                blockedStats.clear();
+                for (String domain : blockedDomains) {
+                    wildcardTrie.insert(domain);
+                }
+                synchronized (blockedStats) {
+                    blockedStats.clear();
+                }
+                blockedDomains = null;
 
-                // Foreground service
                 createNotificationChannel();
                 startForeground(NOTIFICATION_ID, buildNotification());
 
@@ -243,7 +244,7 @@ public class DnsVpnService extends VpnService {
                 notificationUpdater = new Thread(() -> {
                     while (!Thread.currentThread().isInterrupted()) {
                         try {
-                            Thread.sleep(5000);
+                            Thread.sleep(10_000);
                             NotificationManager nm = getSystemService(NotificationManager.class);
                             if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
                         } catch (InterruptedException e) {
@@ -278,7 +279,9 @@ public class DnsVpnService extends VpnService {
             }
             vpnInterface = null;
         }
-        blockedStats.clear();
+        synchronized (blockedStats) {
+            blockedStats.clear();
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
@@ -294,10 +297,18 @@ public class DnsVpnService extends VpnService {
 
     public static Map<String, Integer> getBlockedStatsSnapshot() {
         Map<String, Integer> snapshot = new HashMap<>();
-        for (Map.Entry<String, AtomicInteger> entry : blockedStats.entrySet()) {
-            snapshot.put(entry.getKey(), entry.getValue().get());
+        synchronized (blockedStats) {
+            for (Map.Entry<String, int[]> entry : blockedStats.entrySet()) {
+                snapshot.put(entry.getKey(), entry.getValue()[0]);
+            }
         }
         return snapshot;
+    }
+
+    public static void resetBlockedStats() {
+        synchronized (blockedStats) {
+            blockedStats.clear();
+        }
     }
 
     @Override

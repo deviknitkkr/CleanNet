@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../models/vpn_model.dart';
 
 class StatisticsScreen extends StatefulWidget {
@@ -19,7 +18,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
       final model = context.read<VpnModel>();
       model.refreshStats();
       model.fetchLogs();
@@ -40,7 +39,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final stats = model.blockedStats;
         final total = model.totalBlocked;
 
-        if (model.logs.length > _prevLogCount) {
+        final logCount = model.logs.length;
+        if (logCount > _prevLogCount) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_logScrollController.hasClients) {
               _logScrollController.animateTo(
@@ -51,7 +51,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             }
           });
         }
-        _prevLogCount = model.logs.length;
+        _prevLogCount = logCount;
 
         return Scaffold(
           appBar: AppBar(
@@ -102,18 +102,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 )
               else ...[
-                SizedBox(
-                  height: 300,
-                  child: PieChart(
-                    PieChartData(
-                      sections: _buildSections(stats),
-                      sectionsSpace: 1,
-                      centerSpaceRadius: 50,
-                      centerSpaceColor: Theme.of(context).colorScheme.surface,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -128,31 +116,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           ),
                         ),
                         const Divider(),
-                        ...() {
-                          final sorted = stats.entries.toList()
-                            ..sort((a, b) => b.value.compareTo(a.value));
-                          return sorted.take(10).map((e) => Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        e.key,
-                                        style: const TextStyle(fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '${e.value}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ));
-                        }(),
+                        ..._buildTopList(stats),
                       ],
                     ),
                   ),
@@ -208,49 +172,71 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  List<PieChartSectionData> _buildSections(Map<String, int> stats) {
-    final entries = stats.entries.toList()
+  List<Widget> _buildTopList(Map<String, int> stats) {
+    final sorted = stats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final top = entries.take(10).toList();
-    final others = entries.skip(10).toList();
-
-    final sections = <PieChartSectionData>[];
+    final top = sorted.take(10).toList();
+    final maxVal = top.isNotEmpty ? top.first.value : 1;
     final colors = Colors.primaries;
 
+    final tiles = <Widget>[];
     for (var i = 0; i < top.length; i++) {
       final e = top[i];
-      sections.add(PieChartSectionData(
-        color: colors[i % colors.length],
-        value: e.value.toDouble(),
-        title: '${e.key.split('.').takeLast(2).join('.')}\n${e.value}',
-        radius: 120,
-        titleStyle: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
+      final ratio = e.value / maxVal;
+      tiles.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors[i % colors.length],
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  e.key,
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: ratio,
+                    backgroundColor: Colors.grey.withOpacity(0.15),
+                    color: colors[i % colors.length],
+                    minHeight: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 36,
+                child: Text(
+                  '${e.value}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ));
+      );
     }
-
-    if (others.isNotEmpty) {
-      final othersValue = others.fold<int>(0, (s, e) => s + e.value);
-      sections.add(PieChartSectionData(
-        color: Colors.grey,
-        value: othersValue.toDouble(),
-        title: 'Others\n$othersValue',
-        radius: 120,
-        titleStyle: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ));
-    }
-
-    return sections;
+    return tiles;
   }
-}
-
-extension _TakeLast<T> on Iterable<T> {
-  Iterable<T> takeLast(int n) => toList().reversed.take(n).toList().reversed;
 }

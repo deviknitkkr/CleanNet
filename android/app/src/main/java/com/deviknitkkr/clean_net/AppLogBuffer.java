@@ -6,8 +6,9 @@ import java.util.Date;
 import java.util.List;
 
 public class AppLogBuffer {
-    private static final int MAX_ENTRIES = 500;
+    private static final int MAX_ENTRIES = 128;
     private static final AppLogBuffer INSTANCE = new AppLogBuffer();
+    private static final DateFormat DF = DateFormat.getTimeInstance(DateFormat.MEDIUM);
 
     private final String[] entries = new String[MAX_ENTRIES];
     private int index = 0;
@@ -18,7 +19,7 @@ public class AppLogBuffer {
     }
 
     public synchronized void log(String tag, String message) {
-        String ts = DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date());
+        String ts = DF.format(new Date());
         entries[index] = "[" + ts + "][" + tag + "] " + message;
         index = (index + 1) % MAX_ENTRIES;
         if (count < MAX_ENTRIES) count++;

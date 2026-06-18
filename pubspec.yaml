@@ -32,7 +32,6 @@ dependencies:
     sdk: flutter
   provider: ^6.0.3
   shared_preferences: ^2.0.0
-  fl_chart: ^0.63.0
   http: ^1.2.0
 
 dev_dependencies:

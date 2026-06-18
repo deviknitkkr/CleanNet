@@ -1,9 +1,16 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+bool _mapEquals(Map<String, int> a, Map<String, int> b) {
+  if (a.length != b.length) return false;
+  for (final e in a.entries) {
+    if (b[e.key] != e.value) return false;
+  }
+  return true;
+}
 
 class VpnModel extends ChangeNotifier {
   final SharedPreferences _prefs;
@@ -49,14 +56,6 @@ class VpnModel extends ChangeNotifier {
     _isVpnEnabled = _prefs.getBool('vpn_enabled') ?? false;
     _blockedDomains = _prefs.getStringList('blocked_domains') ?? [];
     _dnsServer = _prefs.getString('dns_server') ?? '';
-    final raw = _prefs.getString('blocked_stats');
-    if (raw != null) {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        _blockedStats = Map<String, int>.from(
-            decoded.map((k, v) => MapEntry(k.toString(), (v as num).toInt())));
-      }
-    }
   }
 
   Future<void> checkVpnState() async {
@@ -75,17 +74,18 @@ class VpnModel extends ChangeNotifier {
       final stats = await _vpnChannel
           .invokeMethod<Map<Object?, Object?>>('getStats');
       if (stats != null) {
-        _blockedStats = stats.map(
+        final parsed = stats.map(
             (k, v) => MapEntry(k.toString(), (v as num).toInt()));
-        _prefs.setString('blocked_stats', jsonEncode(_blockedStats));
-        notifyListeners();
+        if (!_mapEquals(_blockedStats, parsed)) {
+          _blockedStats = parsed;
+          notifyListeners();
+        }
       }
     } catch (_) {}
   }
 
   Future<void> resetStats() async {
     _blockedStats = {};
-    _prefs.setString('blocked_stats', jsonEncode(_blockedStats));
     try {
       await _vpnChannel.invokeMethod('resetStats');
     } catch (_) {}

@@ -18,8 +18,7 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
+                Container(
                   width: 160,
                   height: 160,
                   decoration: BoxDecoration(

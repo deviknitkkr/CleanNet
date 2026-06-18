@@ -34,11 +34,13 @@ import java.util.function.Predicate;
 
 public class DnsHandler implements Runnable {
     private static final String TAG = "DnsHandler";
-    private static final int BUFFER_SIZE = 32767;
+    private static final int TUN_BUF_SIZE = 2048;
+    private static final int DNS_BUF_SIZE = 4096;
     private static final int DNS_CACHE_TTL_MS = 30_000;
     private static final int SELECT_TIMEOUT_MS = 1_000;
-    private static final int MAX_PENDING = 256;
+    private static final int MAX_PENDING = 128;
     private static final int PENDING_CLEANUP_MS = 10_000;
+    private static final int MAX_CACHE_ENTRIES = 64;
 
     private final InetAddress dnsServer;
     private volatile Predicate<String> dnsQueryCallback;
@@ -48,7 +50,7 @@ public class DnsHandler implements Runnable {
 
     private final DatagramChannel dnsChannel;
     private final Selector selector;
-    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocate(BUFFER_SIZE);
+    private final ByteBuffer dnsReceiveBuf = ByteBuffer.allocate(DNS_BUF_SIZE);
     private final Map<String, CachedDnsResponse> dnsCache = new ConcurrentHashMap<>();
     private final Map<Integer, PendingQuery> pendingQueries = new ConcurrentHashMap<>();
     private final AppLogBuffer appLog = AppLogBuffer.getInstance();
@@ -112,7 +114,7 @@ public class DnsHandler implements Runnable {
         Thread responseThread = new Thread(this::responseLoop, "dns-response");
         responseThread.start();
 
-        byte[] tunBuf = new byte[BUFFER_SIZE];
+        byte[] tunBuf = new byte[TUN_BUF_SIZE];
         try {
             while (running && !Thread.currentThread().isInterrupted()) {
                 int bytesRead = inputStream.read(tunBuf);
@@ -172,6 +174,10 @@ public class DnsHandler implements Runnable {
         if (pending == null) return;
 
         dnsCache.put(pending.queryName, new CachedDnsResponse(responseData));
+        if (dnsCache.size() > MAX_CACHE_ENTRIES) {
+            long cutoff = System.currentTimeMillis() - DNS_CACHE_TTL_MS;
+            dnsCache.values().removeIf(c -> c.expiresAt < cutoff);
+        }
         appLog.log(TAG, "Response: " + pending.queryName);
 
         sendResponse(pending.requestPacket, responseData);
