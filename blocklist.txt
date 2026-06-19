@@ -2064,3 +2064,4 @@ tapfiliate.com
 *.tapfiliate.com
 everflow.io
 *.everflow.io
+hesads.akamaized.net
