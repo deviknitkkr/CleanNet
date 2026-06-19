@@ -2065,3 +2065,5 @@ tapfiliate.com
 everflow.io
 *.everflow.io
 hesads.akamaized.net
+bifrost-api.hotstar.com
+service.hotstar.com
